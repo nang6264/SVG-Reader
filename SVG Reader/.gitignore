@@ -1,0 +1,11 @@
+.vs/
+*.vsidx
+bin/
+obj/
+Debug/
+Release/
+*.user
+*.suo
+*.log
+*.tmp
+
