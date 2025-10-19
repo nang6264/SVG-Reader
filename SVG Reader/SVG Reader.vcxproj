@@ -132,6 +132,7 @@
     <ClCompile Include="Line.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Path.cpp" />
+    <ClCompile Include="Polygon.cpp" />
     <ClCompile Include="Rect.cpp" />
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="SVGElement.cpp" />
@@ -146,6 +147,7 @@
     <ClInclude Include="Color.h" />
     <ClInclude Include="Line.h" />
     <ClInclude Include="Path.h" />
+    <ClInclude Include="Polygon.h" />
     <ClInclude Include="Rect.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="SVGElement.h" />
@@ -155,6 +157,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
+    <None Include=".gitkeep" />
     <None Include="logo.svg" />
     <None Include="test1.svg" />
   </ItemGroup>

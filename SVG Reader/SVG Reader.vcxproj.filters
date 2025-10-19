@@ -19,37 +19,37 @@
     <Filter Include="src\utils">
       <UniqueIdentifier>{3b1dd0cf-8008-42c6-9419-bcd0cc1977d6}</UniqueIdentifier>
     </Filter>
-    <Filter Include="src\elements">
+    <Filter Include="src\model">
       <UniqueIdentifier>{c5c6415f-49c0-4213-94b0-15e5705cc2b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Parser">
+      <UniqueIdentifier>{f1df602c-c752-4cca-891d-e3d484060093}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Renderer">
+      <UniqueIdentifier>{8f72edb0-2f5a-47cf-8188-1051e0d3b756}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="Renderer.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="SVGParer.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="SVGElement.cpp">
-      <Filter>src\elements</Filter>
+      <Filter>src\model</Filter>
     </ClCompile>
     <ClCompile Include="Circle.cpp">
-      <Filter>src\elements</Filter>
+      <Filter>src\model</Filter>
     </ClCompile>
     <ClCompile Include="Rect.cpp">
-      <Filter>src\elements</Filter>
+      <Filter>src\model</Filter>
     </ClCompile>
     <ClCompile Include="Line.cpp">
-      <Filter>src\elements</Filter>
+      <Filter>src\model</Filter>
     </ClCompile>
     <ClCompile Include="Path.cpp">
-      <Filter>src\elements</Filter>
+      <Filter>src\model</Filter>
     </ClCompile>
     <ClCompile Include="Text.cpp">
-      <Filter>src\elements</Filter>
+      <Filter>src\model</Filter>
     </ClCompile>
     <ClCompile Include="Color.cpp">
       <Filter>src\utils</Filter>
@@ -60,8 +60,17 @@
     <ClCompile Include="test_parser.cpp">
       <Filter>tests</Filter>
     </ClCompile>
+    <ClCompile Include="SVGParer.cpp">
+      <Filter>src\Parser</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderer.cpp">
+      <Filter>src\Renderer</Filter>
+    </ClCompile>
     <ClCompile Include="test_render.cpp">
-      <Filter>src</Filter>
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="Polygon.cpp">
+      <Filter>src\model</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -95,6 +104,9 @@
     <ClInclude Include="Text.h">
       <Filter>include</Filter>
     </ClInclude>
+    <ClInclude Include="Polygon.h">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="test1.svg">
@@ -104,5 +116,6 @@
       <Filter>assets</Filter>
     </None>
     <None Include=".gitignore" />
+    <None Include=".gitkeep" />
   </ItemGroup>
 </Project>
