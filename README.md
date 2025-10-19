@@ -2,6 +2,7 @@
 
 Overview:
 Mục tiêu của đồ án này là thiết kế và triển khai một ứng dụng đọc và hiển thị file SVG sử dụng ngôn ngữ lập trình C++ và các nguyên tắc Lập trình Hướng đối tượng (OOP). Ứng dụng phải có khả năng phân tích (parse) file SVG, kết xuất (render) đồ họa vector.
+
 Functional requirements: 
 1. SVG Reading and Parsing
    - Có  khả năng mở file SVG và phân tích nội dung.
@@ -23,3 +24,4 @@ Documentation:
   + Các phương thức chính và chức năng của chúng.
 - Bao gồm sơ đồ UML (class diagram, sequence diagram nếu cần) thể hiện quan hệ và tương tác trong module kết xuất.
 - Chú thích (comment) mã nguồn đầy đủ để tăng tính dễ đọc và hỗ trợ phát triển sau này.
+
