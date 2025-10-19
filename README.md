@@ -14,14 +14,17 @@ Functional requirements:
 3. Interactivity
    - Zoom in/out
    - rotate
+     
 Object-Oriented Design:
  - Xây dựng hệ thống lớp (class hierarchy) có tổ chức, mô tả các phần tử SVG khác nhau.
  - Vận dụng kế thừa (inheritance), đóng gói (encapsulation) và đa hình (polymorphism) để tạo thiết kế mạnh mẽ và dễ mở rộng.
  - Xem xét áp dụng một số mẫu thiết kế (design patterns) phù hợp cho việc tạo đối tượng và duyệt cây (ví dụ: Factory, Visitor, Composite — tuỳ lựa chọn).
+   
 Documentation:
 - Cung cấp tài liệu chi tiết mô tả:
   + Hệ thống lớp, mối quan hệ giữa các lớp.
   + Các phương thức chính và chức năng của chúng.
 - Bao gồm sơ đồ UML (class diagram, sequence diagram nếu cần) thể hiện quan hệ và tương tác trong module kết xuất.
 - Chú thích (comment) mã nguồn đầy đủ để tăng tính dễ đọc và hỗ trợ phát triển sau này.
+
 
