@@ -140,3 +140,7 @@ bool SVGParser::parseFile(const std::string& filename) {
 
     return true;
 }
+
+// Getter
+    const SVGParser::ElementList& SVGParser::getElements() const {
+        return elements_; }
