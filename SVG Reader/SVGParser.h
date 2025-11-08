@@ -53,7 +53,7 @@ public:
     bool isValidFile(const std::string& filename) const;
 
     // Getter
-    const ElementList& getElements() const { return elements_; }
+    const ElementList& getElements() const;
 };
 //
 #endif // SVG_READER_SVGPARSER_H
