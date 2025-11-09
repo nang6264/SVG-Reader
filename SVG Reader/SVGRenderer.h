@@ -1,34 +1,44 @@
-// SVGRenderer.h
-#ifndef SVGRENDERER_H
+﻿#ifndef SVGRENDERER_H
 #define SVGRENDERER_H
 
-// Khai báo trước (forward declaration) các lớp SVGElement
-// để tránh phụ thuộc vòng và lỗi biên dịch.
+#include <SFML/Graphics.hpp>
+#include <memory>
+#include <vector>
+
+// CHỈ forward declarations - KHÔNG include các file .h cụ thể
+class SVGElement;
 class Circle;
 class Rect;
 class Line;
 class Polygon;
 class Path;
-class Ellipse;
 
 /**
- * @brief Lớp trừu tượng (interface) định nghĩa giao diện cho việc render (vẽ) các phần tử SVG.
- * * Lớp này sử dụng mô hình Visitor hoặc Strategy đơn giản để cho phép các phần tử SVG
- * gọi hàm render cụ thể tương ứng trong một lớp Renderer.
+ * @brief Lớp renderer để hiển thị các phần tử SVG sử dụng SFML
  */
 class SVGRenderer {
+private:
+    sf::RenderWindow window;
+    sf::View view;
+    std::vector<std::shared_ptr<SVGElement>> elements;
+    void drawLineBetweenPoints(const sf::Vector2f& p1, const sf::Vector2f& p2, const sf::Color& color);
 public:
-    // Destructor ảo (virtual destructor) là cần thiết cho lớp cơ sở.
-    virtual ~SVGRenderer() = default;
+    SVGRenderer(unsigned int width = 800, unsigned int height = 600);
 
-    // Các hàm vẽ thuần ảo (pure virtual function) cho từng loại phần tử.
-    // Lớp triển khai cụ thể (ví dụ: ConsoleRenderer, FileRenderer) phải override tất cả.
-    virtual void renderCircle(const Circle& circle) = 0;
-    virtual void renderRect(const Rect& rect) = 0;
-    virtual void renderLine(const Line& line) = 0;
-    virtual void renderPolygon(const Polygon& polygon) = 0;
-    virtual void renderPath(const Path& path) = 0;
-    virtual void renderEllipse(const Ellipse& ellipse) = 0;
+    void addElement(std::shared_ptr<SVGElement> element);
+    void render();
+
+    // Các hàm render cụ thể cho từng loại phần tử SVG
+    void renderCircle(const Circle& circle);
+    void renderRect(const Rect& rect);
+    void renderLine(const Line& line);
+    void renderPolygon(const Polygon& polygon);
+    void renderPath(const Path& path);
+
+    // Điều khiển camera
+    void zoomIn();
+    void zoomOut();
+    void rotate(float angle);
 };
 
-#endif // SVGRENDERER_H
+#endif
