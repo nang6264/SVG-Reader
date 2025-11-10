@@ -4,11 +4,11 @@
 #include <sstream>
 #include <vector>
 #include <cctype>
-#include "Circle.h"
+/*#include "Circle.h"
 #include "Rect.h"
 #include "Line.h"
 #include "Polygon.h"
-#include "Path.h"
+#include "Path.h"*/
 using namespace std;
 
 // --- Constructor ---
@@ -249,4 +249,5 @@ void SVGRenderer::renderPath(const Path& path) {
 
     // In thông báo console
     cout << "Path rendered as simple square (complex paths not supported yet)" << std::endl;
+
 }
