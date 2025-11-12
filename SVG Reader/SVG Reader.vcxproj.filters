@@ -36,21 +36,6 @@
     <ClCompile Include="SVGElement.cpp">
       <Filter>src\model</Filter>
     </ClCompile>
-    <ClCompile Include="Circle.cpp">
-      <Filter>src\model</Filter>
-    </ClCompile>
-    <ClCompile Include="Rect.cpp">
-      <Filter>src\model</Filter>
-    </ClCompile>
-    <ClCompile Include="Line.cpp">
-      <Filter>src\model</Filter>
-    </ClCompile>
-    <ClCompile Include="Path.cpp">
-      <Filter>src\model</Filter>
-    </ClCompile>
-    <ClCompile Include="Text.cpp">
-      <Filter>src\model</Filter>
-    </ClCompile>
     <ClCompile Include="Color.cpp">
       <Filter>src\utils</Filter>
     </ClCompile>
@@ -63,14 +48,14 @@
     <ClCompile Include="SVGParer.cpp">
       <Filter>src\Parser</Filter>
     </ClCompile>
-    <ClCompile Include="Renderer.cpp">
-      <Filter>src\Renderer</Filter>
-    </ClCompile>
     <ClCompile Include="test_render.cpp">
       <Filter>tests</Filter>
     </ClCompile>
-    <ClCompile Include="Polygon.cpp">
-      <Filter>src\model</Filter>
+    <ClCompile Include="SVGRenderer.cpp">
+      <Filter>src\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="FileSVGRenderer.cpp">
+      <Filter>src\Renderer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -80,31 +65,16 @@
     <ClInclude Include="Transform.h">
       <Filter>src\utils</Filter>
     </ClInclude>
-    <ClInclude Include="Renderer.h">
-      <Filter>include</Filter>
-    </ClInclude>
     <ClInclude Include="SVGParser.h">
       <Filter>include</Filter>
     </ClInclude>
     <ClInclude Include="SVGElement.h">
       <Filter>include</Filter>
     </ClInclude>
-    <ClInclude Include="Circle.h">
+    <ClInclude Include="SVGRenderer.h">
       <Filter>include</Filter>
     </ClInclude>
-    <ClInclude Include="Rect.h">
-      <Filter>include</Filter>
-    </ClInclude>
-    <ClInclude Include="Line.h">
-      <Filter>include</Filter>
-    </ClInclude>
-    <ClInclude Include="Path.h">
-      <Filter>include</Filter>
-    </ClInclude>
-    <ClInclude Include="Text.h">
-      <Filter>include</Filter>
-    </ClInclude>
-    <ClInclude Include="Polygon.h">
+    <ClInclude Include="FileSVGRenderer.h">
       <Filter>include</Filter>
     </ClInclude>
   </ItemGroup>

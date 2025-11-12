@@ -127,32 +127,22 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Circle.cpp" />
     <ClCompile Include="Color.cpp" />
-    <ClCompile Include="Line.cpp" />
+    <ClCompile Include="FileSVGRenderer.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Path.cpp" />
-    <ClCompile Include="Polygon.cpp" />
-    <ClCompile Include="Rect.cpp" />
-    <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="SVGElement.cpp" />
     <ClCompile Include="SVGParer.cpp" />
+    <ClCompile Include="SVGRenderer.cpp" />
     <ClCompile Include="test_parser.cpp" />
     <ClCompile Include="test_render.cpp" />
-    <ClCompile Include="Text.cpp" />
     <ClCompile Include="Transform.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Circle.h" />
     <ClInclude Include="Color.h" />
-    <ClInclude Include="Line.h" />
-    <ClInclude Include="Path.h" />
-    <ClInclude Include="Polygon.h" />
-    <ClInclude Include="Rect.h" />
-    <ClInclude Include="Renderer.h" />
+    <ClInclude Include="FileSVGRenderer.h" />
     <ClInclude Include="SVGElement.h" />
     <ClInclude Include="SVGParser.h" />
-    <ClInclude Include="Text.h" />
+    <ClInclude Include="SVGRenderer.h" />
     <ClInclude Include="Transform.h" />
   </ItemGroup>
   <ItemGroup>
