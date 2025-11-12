@@ -52,6 +52,7 @@ public:
      */
     bool isValidFile(const std::string& filename) const;
 
+    ElementList takeElements();
     // Getter
     const ElementList& getElements() const;
 };
