@@ -296,4 +296,5 @@ bool SVGParser::parseFile(const std::string& filename) {
 // Getter
     const SVGParser::ElementList& SVGParser::getElements() const {
         return elements_; }
->>>>>>> 88d8402c1ba434aa87b79b97ed9f7c520821fcca
+
+
