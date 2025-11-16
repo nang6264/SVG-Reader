@@ -36,9 +36,6 @@
     <ClCompile Include="SVGElement.cpp">
       <Filter>src\model</Filter>
     </ClCompile>
-    <ClCompile Include="Color.cpp">
-      <Filter>src\utils</Filter>
-    </ClCompile>
     <ClCompile Include="Transform.cpp">
       <Filter>src\utils</Filter>
     </ClCompile>
@@ -59,9 +56,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Color.h">
-      <Filter>src\utils</Filter>
-    </ClInclude>
     <ClInclude Include="Transform.h">
       <Filter>src\utils</Filter>
     </ClInclude>
