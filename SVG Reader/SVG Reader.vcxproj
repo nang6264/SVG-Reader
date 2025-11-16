@@ -127,7 +127,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Color.cpp" />
     <ClCompile Include="FileSVGRenderer.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SVGElement.cpp" />
@@ -138,7 +137,6 @@
     <ClCompile Include="Transform.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Color.h" />
     <ClInclude Include="FileSVGRenderer.h" />
     <ClInclude Include="SVGElement.h" />
     <ClInclude Include="SVGParser.h" />
