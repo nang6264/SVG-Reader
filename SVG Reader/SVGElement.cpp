@@ -1,14 +1,16 @@
 // SVGElement.cpp
 #include "SVGElement.h"
+#include "SVGElement.h"
 #include <iostream> // Để sử dụng std::stod
 
 // Hàm tiện ích để chuyển string sang double an toàn (nếu cần)
 double safeStod(const std::string& s) {
     try {
         return std::stod(s);
-    } catch (...) {
+    }
+    catch (...) {
         // Xử lý lỗi hoặc trả về giá trị mặc định
-        return 0.0; 
+        return 0.0;
     }
 }
 
@@ -34,7 +36,7 @@ Circle::Circle(const Attributes& attributes) : SVGElement(attributes) {
 
 void Circle::draw(SVGRenderer& renderer) const {
     // Gọi hàm render cụ thể của renderer, truyền tham chiếu 'this'
-    renderer.renderCircle(*this); 
+    renderer.renderCircle(*this);
 }
 
 // --- Định nghĩa Rect ---
@@ -45,7 +47,7 @@ Rect::Rect(const Attributes& attributes) : SVGElement(attributes) {
 
     it = attributes.find("y");
     if (it != attributes.end()) y_ = safeStod(it->second);
-    
+
     it = attributes.find("width");
     if (it != attributes.end()) width_ = safeStod(it->second);
 
@@ -66,7 +68,7 @@ Line::Line(const Attributes& attributes) : SVGElement(attributes) {
 
     it = attributes.find("y1");
     if (it != attributes.end()) y1_ = safeStod(it->second);
-    
+
     it = attributes.find("x2");
     if (it != attributes.end()) x2_ = safeStod(it->second);
 
@@ -109,8 +111,6 @@ void Path::draw(SVGRenderer& renderer) const {
     renderer.renderPath(*this);
 }
 
-// --- Định nghĩa Ellipse ---
-
 Ellipse::Ellipse(const Attributes& attributes) : SVGElement(attributes) {
     // Lấy các thuộc tính riêng của Ellipse từ map
     auto it = attributes.find("cx");
@@ -118,7 +118,7 @@ Ellipse::Ellipse(const Attributes& attributes) : SVGElement(attributes) {
 
     it = attributes.find("cy");
     if (it != attributes.end()) cy_ = safeStod(it->second);
-    
+
     it = attributes.find("rx");
     if (it != attributes.end()) rx_ = safeStod(it->second);
 
@@ -128,6 +128,28 @@ Ellipse::Ellipse(const Attributes& attributes) : SVGElement(attributes) {
 
 void Ellipse::draw(SVGRenderer& renderer) const {
     // Yêu cầu renderer vẽ ellipse
-    // LƯU Ý: Bạn sẽ cần thêm hàm renderEllipse() vào lớp SVGRenderer
-    renderer.renderEllipse(*this); 
+    renderer.renderEllipse(*this);
 }
+
+// --- Định nghĩa Ellipse ---
+
+// Ellipse::Ellipse(const Attributes& attributes) : SVGElement(attributes) {
+//     // Lấy các thuộc tính riêng của Ellipse từ map
+//     auto it = attributes.find("cx");
+//     if (it != attributes.end()) cx_ = safeStod(it->second);
+
+//     it = attributes.find("cy");
+//     if (it != attributes.end()) cy_ = safeStod(it->second);
+
+//     it = attributes.find("rx");
+//     if (it != attributes.end()) rx_ = safeStod(it->second);
+
+//     it = attributes.find("ry");
+//     if (it != attributes.end()) ry_ = safeStod(it->second);
+// }
+
+// void Ellipse::draw(SVGRenderer& renderer) const {
+//     // Yêu cầu renderer vẽ ellipse
+//     // LƯU Ý: Bạn sẽ cần thêm hàm renderEllipse() vào lớp SVGRenderer
+//     renderer.renderEllipse(*this); 
+// }

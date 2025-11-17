@@ -42,16 +42,16 @@
     <ClCompile Include="test_parser.cpp">
       <Filter>tests</Filter>
     </ClCompile>
-    <ClCompile Include="SVGParer.cpp">
+    <ClCompile Include="SVGParser.cpp">
       <Filter>src\Parser</Filter>
     </ClCompile>
     <ClCompile Include="test_render.cpp">
       <Filter>tests</Filter>
     </ClCompile>
-    <ClCompile Include="SVGRenderer.cpp">
+    <ClCompile Include="FileSVGRenderer.cpp">
       <Filter>src\Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="FileSVGRenderer.cpp">
+    <ClCompile Include="SVGRenderer.cpp">
       <Filter>src\Renderer</Filter>
     </ClCompile>
   </ItemGroup>
