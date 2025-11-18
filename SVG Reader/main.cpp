@@ -8,9 +8,9 @@
 
 int main()
 {
-    std::string filename = "test1.svg";
-   /* std::cout << "Nhập tên file SVG cần đọc (vd: input.svg): ";
-    std::cin >> filename;*/
+    std::string filename;
+    std::cout << "Nhập tên file SVG cần đọc (vd: input.svg): ";
+    std::cin >> filename;
 
     // 1️⃣ Tạo đối tượng parser
     SVGParser parser;
@@ -21,14 +21,14 @@ int main()
         std::cerr << "❌ Lỗi: Không thể mở file " << filename << std::endl;
         return 1;
     }
-
+    
     // 3️⃣ Phân tích file SVG
     if (!parser.parseFile(filename))
     {
         std::cerr << "❌ Lỗi: Phân tích file SVG thất bại." << std::endl;
         return 1;
     }
-
+    
     // 4️⃣ Tạo renderer SFML
     SVGRenderer renderer(800, 600);
 
@@ -37,7 +37,7 @@ int main()
     SVGParser::ElementList parsedElements = parser.takeElements();
 
     // 6️⃣ Chuyển quyền sở hữu từ unique_ptr sang shared_ptr và thêm vào renderer
-    for (auto& unique_elem : parsedElements)
+    for (auto &unique_elem : parsedElements)
     {
         if (unique_elem)
         {
@@ -52,5 +52,7 @@ int main()
     renderer.render();
 
     std::cout << "Kết thúc chương trình." << std::endl;
+    
+
     return 0;
 }

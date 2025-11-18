@@ -1,446 +1,783 @@
-﻿#include "SVGRenderer.h"
+﻿// SVGRenderer.cpp
+#include "SVGRenderer.h"
 #include "SVGElement.h" // Cần include file này để lấy định nghĩa đầy đủ của các lớp con
 #include <iostream>
-#include <sstream> // Dùng cho renderPolygon và stringToColor
+#include <sstream> // Dùng cho renderPolygon
 #include <vector>
 #include <cctype>    // Dùng cho ::tolower
 #include <cmath>     // Dùng cho sqrt, atan2
 #include <algorithm> // Dùng cho std::max
+#include <cstdint>   // <--- THÊM DÒNG NÀY ĐỂ DÙNG uint8_t
 // Dùng std::cout, std::endl, v.v.
 using namespace std;
 
-// --- Hàm Tiện Ích Chung ---
-
-/**
- * @brief Tự định nghĩa clamp (thay thế std::clamp cho C++ cũ)
- */
-template <typename T>
-constexpr const T manual_clamp(const T& v, const T& lo, const T& hi) {
-    return (v < lo) ? lo : (hi < v) ? hi : v;
+// Hàm giúp đọc giá trị opacity (mặc định là 1.0 - không trong suốt)
+float getOpacity(const std::map<std::string, std::string> &attrs, std::string key)
+{
+    auto it = attrs.find(key);
+    if (it != attrs.end())
+    {
+        try
+        {
+            return std::stof(it->second);
+        }
+        catch (...)
+        {
+        }
+    }
+    return 1.0f; // Mặc định là rõ nét (100%)
 }
 
 /**
- * @brief Hàm tiện ích chuyển đổi chuỗi màu SVG sang màu SFML (ĐÃ SỬA RGB)
+ * @brief Hàm tiện ích chuyển đổi chuỗi màu SVG sang màu SFML
  */
-sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type) {
+sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type)
+{
+    // Chuyển sang chữ thường và xóa khoảng trắng
     std::transform(colorStr.begin(), colorStr.end(), colorStr.begin(), ::tolower);
+    colorStr.erase(std::remove_if(colorStr.begin(), colorStr.end(), ::isspace), colorStr.end());
 
-    if (colorStr == "none") return sf::Color::Transparent;
-    if (colorStr == "black") return sf::Color::Black;
-    if (colorStr == "white") return sf::Color::White;
-    if (colorStr == "red") return sf::Color::Red;
-    if (colorStr == "green") return sf::Color::Green;
-    if (colorStr == "blue") return sf::Color::Blue;
-
-    // --- Xử lý định dạng RGB: rgb(R,G,B) ---
-    if (colorStr.rfind("rgb(", 0) == 0) {
-        // Cắt bỏ "rgb(" ở đầu và ")" ở cuối
-        std::string rgb_content = colorStr.substr(4, colorStr.length() - 5);
-
-        std::stringstream ss(rgb_content);
-        std::string segment;
-        std::vector<int> colors;
-
-        while (std::getline(ss, segment, ',')) {
-            try {
-                colors.push_back(std::stoi(segment));
-            }
-            catch (...) {
-                return sf::Color::Black; // Lỗi cú pháp
-            }
-        }
-
-        if (colors.size() == 3) {
-            // SỬA LỖI: Dùng unsigned char và std::min/std::max
-            unsigned char r = (unsigned char)std::min(255, std::max(0, colors[0]));
-            unsigned char g = (unsigned char)std::min(255, std::max(0, colors[1]));
-            unsigned char b = (unsigned char)std::min(255, std::max(0, colors[2]));
-            return sf::Color(r, g, b);
-        }
+    if (colorStr == "none")
+    {
+        return sf::Color::Transparent;
     }
+    if (colorStr == "black")
+    {
+        return sf::Color::Black;
+    }
+    if (colorStr == "white")
+    {
+        return sf::Color::White;
+    }
+    if (colorStr == "red")
+    {
+        return sf::Color::Red;
+    }
+    if (colorStr == "green")
+    {
+        return sf::Color::Green;
+    }
+    if (colorStr == "blue")
+    {
+        return sf::Color::Blue;
+    }
+    // ... (thêm các màu khác nếu cần) ...
 
-    // --- Xử lý mã Hex (ví dụ: #FF0000) ---
-    if (colorStr.length() > 0 && colorStr[0] == '#') {
-        try {
+    // Xử lý mã Hex (ví dụ: #FF0000)
+    if (colorStr.length() > 0 && colorStr[0] == '#')
+    {
+        try
+        {
             unsigned int hexValue = std::stoul(colorStr.substr(1), nullptr, 16);
-            if (colorStr.length() == 7) {
+            if (colorStr.length() == 7)
+            { // #RRGGBB
                 return sf::Color(
-                    (hexValue >> 16) & 0xFF,
-                    (hexValue >> 8) & 0xFF,
-                    (hexValue) & 0xFF
+                    (hexValue >> 16) & 0xFF, // R
+                    (hexValue >> 8) & 0xFF,  // G
+                    (hexValue) & 0xFF        // B
                 );
             }
         }
-        catch (...) {}
+        catch (...)
+        { /* Parse lỗi */
+        }
+    }
+
+    // [MỚI] Xử lý RGB (ví dụ: rgb(200,100,150))
+    if (colorStr.rfind("rgb(", 0) == 0)
+    { // Nếu chuỗi bắt đầu bằng "rgb("
+        try
+        {
+            // Xóa "rgb(" ở đầu và ")" ở cuối
+            std::string values = colorStr.substr(4, colorStr.length() - 5);
+
+            std::stringstream ss(values);
+            std::string segment;
+            int r, g, b;
+
+            // Tách R
+            if (std::getline(ss, segment, ','))
+            {
+                r = std::stoi(segment);
+            }
+            else
+                return sf::Color::Magenta; // Lỗi
+
+            // Tách G
+            if (std::getline(ss, segment, ','))
+            {
+                g = std::stoi(segment);
+            }
+            else
+                return sf::Color::Magenta; // Lỗi
+
+            // Tách B
+            if (std::getline(ss, segment))
+            { // Đọc phần còn lại
+                b = std::stoi(segment);
+            }
+            else
+                return sf::Color::Magenta; // Lỗi
+
+            return sf::Color(r, g, b);
+        }
+        catch (...)
+        {
+            // Lỗi chuyển đổi stoi
+            return sf::Color::Magenta; // Báo lỗi parse
+        }
     }
 
     // Mặc định
-    if (type == "fill") return sf::Color::Black;
-    if (type == "stroke") return sf::Color::Transparent;
+    if (type == "fill")
+        return sf::Color::Black;
+    if (type == "stroke")
+        return sf::Color::Transparent;
 
-    return sf::Color::Magenta;
+    return sf::Color::Magenta; // Trả về màu Magenta (tím) để dễ nhận biết lỗi
 }
-
-/**
- * @brief Hàm tiện ích áp dụng Opacity (Alpha) cho màu
- */
-static sf::Color applyOpacity(sf::Color color, const Attributes& attributes, const std::string& opacityAttribute) {
-    auto it_opacity = attributes.find(opacityAttribute);
-    if (it_opacity != attributes.end()) {
-        try {
-            float opacity = std::stof(it_opacity->second);
-
-            // Chuyển 0.0-1.0 sang 0-255 và dùng manual_clamp
-            unsigned char alpha = (unsigned char)manual_clamp(opacity * 255.0f, 0.0f, 255.0f);
-
-            color.a = alpha;
-        }
-        catch (...) {}
-    }
-    return color;
-}
-
 
 // --- Constructor ---
-SVGRenderer::SVGRenderer(unsigned int width, unsigned int height) {
-    window.create(sf::VideoMode({ width, height }), "SVG Renderer (SFML)");
+SVGRenderer::SVGRenderer(unsigned int width, unsigned int height)
+{
+    window.create(sf::VideoMode({width, height}), "SVG Renderer (SFML)");
     view = window.getDefaultView();
+    if (!font.openFromFile("times.ttf"))
+    {
+        // Nếu trên Mac/Linux không có file này, thử đường dẫn hệ thống
+        // Hoặc in ra lỗi để biết
+        std::cerr << "Cảnh báo: Không thể load font arial.ttf! Chữ sẽ không hiện." << std::endl;
+    }
     cout << "SVGRenderer: Window created " << width << "x" << height << std::endl;
     cout << "Controls: Mouse Wheel = Zoom, R = Rotate, ESC = Exit" << std::endl;
 }
 
 // --- Add Element ---
-void SVGRenderer::addElement(std::shared_ptr<SVGElement> element) {
-    if (element) {
+void SVGRenderer::addElement(std::shared_ptr<SVGElement> element)
+{
+    if (element)
+    {
         elements.push_back(element);
     }
 }
 
 // --- Zoom & Rotate ---
-void SVGRenderer::zoomIn() {
+void SVGRenderer::zoomIn()
+{
     view.zoom(0.9f);
     cout << "Zoomed In" << std::endl;
 }
 
-void SVGRenderer::zoomOut() {
+void SVGRenderer::zoomOut()
+{
     view.zoom(1.1f);
     cout << "Zoomed Out" << std::endl;
 }
 
-void SVGRenderer::rotate(float angle) {
+void SVGRenderer::rotate(float angle)
+{
     view.rotate(sf::degrees(angle));
     cout << "Rotated by " << angle << " degrees" << std::endl;
 }
 
 // --- Render Loop ---
-void SVGRenderer::render() {
-    while (window.isOpen()) {
-        while (auto event = window.pollEvent()) {
-            if (event->is<sf::Event::Closed>()) {
+void SVGRenderer::render()
+{
+    while (window.isOpen())
+    {
+        while (auto event = window.pollEvent())
+        {
+            if (event->is<sf::Event::Closed>())
+            {
                 window.close();
                 cout << "Window closed by user" << std::endl;
             }
-            else if (auto* keyEvent = event->getIf<sf::Event::KeyPressed>()) {
-                if (keyEvent->scancode == sf::Keyboard::Scancode::Escape) {
+            else if (auto *keyEvent = event->getIf<sf::Event::KeyPressed>())
+            {
+                if (keyEvent->scancode == sf::Keyboard::Scancode::Escape)
+                {
                     window.close();
                     cout << "Window closed by ESC" << std::endl;
                 }
-                else if (keyEvent->scancode == sf::Keyboard::Scancode::R) {
+                else if (keyEvent->scancode == sf::Keyboard::Scancode::R)
+                {
                     rotate(10.f);
                 }
             }
-            else if (auto* wheelEvent = event->getIf<sf::Event::MouseWheelScrolled>()) {
-                if (wheelEvent->delta > 0) zoomIn();
-                else zoomOut();
+            else if (auto *wheelEvent = event->getIf<sf::Event::MouseWheelScrolled>())
+            {
+                if (wheelEvent->delta > 0)
+                    zoomIn();
+                else
+                    zoomOut();
             }
         }
 
-        window.clear(sf::Color::White);
-        window.setView(view);
+        window.clear(sf::Color::White); // Xóa màn hình
+        window.setView(view);           // Áp dụng camera
 
-        for (auto& element : elements) {
-            element->draw(*this);
+        // Vẽ tất cả các phần tử (ĐA HÌNH)
+        for (auto &element : elements)
+        {
+            element->draw(*this); // Tự động gọi renderCircle, renderRect...
         }
 
-        window.display();
+        window.display(); // Hiển thị lên màn hình
     }
     cout << "Render loop ended" << std::endl;
 }
 
-// --- Render Circle (ĐÃ THÊM OPACITY) ---
-void SVGRenderer::renderCircle(const Circle& circle) {
+// --- Render Circle ---
+void SVGRenderer::renderCircle(const Circle &circle)
+{
     float r = static_cast<float>(circle.getR());
     sf::CircleShape shape(r);
 
+    // SVG (cx, cy) là tâm, SFML (x, y) là góc trên trái
+    // Dùng sf::Vector2f cho SFML 3.0
     shape.setPosition(sf::Vector2f(
         static_cast<float>(circle.getCx() - r),
-        static_cast<float>(circle.getCy() - r)
-    ));
+        static_cast<float>(circle.getCy() - r)));
 
-    const auto& attributes = circle.getAttributes();
+    const auto &attributes = circle.getAttributes();
 
-    // 1. FILL COLOR & OPACITY
+    // --- XỬ LÝ MÀU FILL & OPACITY ---
     auto it_fill = attributes.find("fill");
     std::string fill_color_str = (it_fill != attributes.end()) ? it_fill->second : "black";
 
+    // 1. KHAI BÁO BIẾN TRƯỚC (Sửa lỗi undeclared identifier)
     sf::Color fillColor = stringToColor(fill_color_str, "fill");
-    fillColor = applyOpacity(fillColor, attributes, "fill-opacity"); // Áp dụng opacity
+
+    // 2. Lấy độ trong suốt
+    float fillOpacity = getOpacity(attributes, "fill-opacity");
+
+    // 3. GÁN ALPHA (Sửa lỗi sf::Uint8 thành std::uint8_t)
+    fillColor.a = static_cast<std::uint8_t>(fillOpacity * 255);
+
     shape.setFillColor(fillColor);
 
-    // 2. STROKE COLOR & OPACITY
+    // --- XỬ LÝ MÀU STROKE & OPACITY ---
     auto it_stroke = attributes.find("stroke");
     std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "none";
 
+    // 1. KHAI BÁO BIẾN TRƯỚC
     sf::Color strokeColor = stringToColor(stroke_color_str, "stroke");
-    strokeColor = applyOpacity(strokeColor, attributes, "stroke-opacity"); // Áp dụng opacity
+
+    // 2. Lấy độ trong suốt
+    float strokeOpacity = getOpacity(attributes, "stroke-opacity");
+
+    // 3. GÁN ALPHA (Sửa lỗi sf::Uint8 thành std::uint8_t)
+    strokeColor.a = static_cast<std::uint8_t>(strokeOpacity * 255);
+
     shape.setOutlineColor(strokeColor);
 
-    // 3. STROKE WIDTH
+    // --- XỬ LÝ ĐỘ DÀY VIỀN ---
     auto it_width = attributes.find("stroke-width");
     float thickness = 1.f;
-    if (it_width != attributes.end()) {
-        try {
+    if (it_width != attributes.end())
+    {
+        try
+        {
             thickness = std::stof(it_width->second);
         }
-        catch (...) { /* giữ giá trị mặc định */ }
+        catch (...)
+        {
+            thickness = 1.f;
+        }
     }
-
-    // Nếu màu là none hoặc alpha=0, set thickness = 0
-    shape.setOutlineThickness((stroke_color_str == "none" || strokeColor.a == 0) ? 0.f : thickness);
+    shape.setOutlineThickness((stroke_color_str == "none") ? 0.f : thickness);
 
     window.draw(shape);
 }
 
-// --- Render Rect (ĐÃ THÊM OPACITY) ---
-void SVGRenderer::renderRect(const Rect& rect) {
+// --- Render Rect ---
+void SVGRenderer::renderRect(const Rect &rect)
+{
     sf::RectangleShape shape(sf::Vector2f(
         static_cast<float>(rect.getWidth()),
-        static_cast<float>(rect.getHeight())
-    ));
+        static_cast<float>(rect.getHeight())));
 
+    // SVG (x,y) là góc trên trái, giống SFML
     shape.setPosition(sf::Vector2f(
         static_cast<float>(rect.getX()),
-        static_cast<float>(rect.getY())
-    ));
+        static_cast<float>(rect.getY())));
 
-    const auto& attributes = rect.getAttributes();
+    const auto &attributes = rect.getAttributes();
 
-    // 1. FILL COLOR & OPACITY
+    // Fill
     auto it_fill = attributes.find("fill");
     std::string fill_color_str = (it_fill != attributes.end()) ? it_fill->second : "black";
 
+    // 1. KHAI BÁO biến fillColor (Sửa lỗi undeclared identifier)
     sf::Color fillColor = stringToColor(fill_color_str, "fill");
-    fillColor = applyOpacity(fillColor, attributes, "fill-opacity"); // Áp dụng opacity
+
+    float fillOpacity = getOpacity(attributes, "fill-opacity");
+
+    // 2. SỬA LỖI Uint8 -> std::uint8_t (Sửa lỗi SFML 3.0)
+    fillColor.a = static_cast<std::uint8_t>(fillOpacity * 255);
+
     shape.setFillColor(fillColor);
 
-    // 2. STROKE COLOR & OPACITY
+    // --- XỬ LÝ MÀU STROKE & STROKE-OPACITY ---
     auto it_stroke = attributes.find("stroke");
     std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "none";
 
+    // 1. KHAI BÁO biến strokeColor
     sf::Color strokeColor = stringToColor(stroke_color_str, "stroke");
-    strokeColor = applyOpacity(strokeColor, attributes, "stroke-opacity"); // Áp dụng opacity
-    shape.setOutlineColor(strokeColor);
 
-    // 3. STROKE WIDTH
-    auto it_width = attributes.find("stroke-width");
-    float thickness = 1.f;
-    if (it_width != attributes.end()) {
-        try {
-            thickness = std::stof(it_width->second);
-        }
-        catch (...) { /* giữ giá trị mặc định */ }
-    }
+    float strokeOpacity = getOpacity(attributes, "stroke-opacity");
 
-    shape.setOutlineThickness((stroke_color_str == "none" || strokeColor.a == 0) ? 0.f : thickness);
+    // 2. SỬA LỖI Uint8 -> std::uint8_t
+    strokeColor.a = static_cast<std::uint8_t>(strokeOpacity * 255);
 
-    window.draw(shape);
-}
-
-// --- Render Line (Giữ nguyên logic Line hiện tại) ---
-void SVGRenderer::renderLine(const Line& line) {
-    float x1 = static_cast<float>(line.getX1());
-    float y1 = static_cast<float>(line.getY1());
-    float x2 = static_cast<float>(line.getX2());
-    float y2 = static_cast<float>(line.getY2());
-
-    const auto& attributes = line.getAttributes();
-
-    auto it_width = attributes.find("stroke-width");
-    float thickness = 1.f;
-    if (it_width != attributes.end()) {
-        try {
-            thickness = std::stof(it_width->second);
-        }
-        catch (...) { /* giữ giá trị mặc định */ }
-    }
-
-    auto it_stroke = attributes.find("stroke");
-    std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "black";
-    sf::Color stroke_color = stringToColor(stroke_color_str, "stroke");
-
-    // Áp dụng stroke-opacity cho Line
-    stroke_color = applyOpacity(stroke_color, attributes, "stroke-opacity");
-
-    if (stroke_color == sf::Color::Transparent || thickness <= 0.f) {
-        return;
-    }
-
-    // SFML không có Line, ta dùng RectangleShape
-    float dx = x2 - x1;
-    float dy = y2 - y1;
-    float length = std::sqrt(dx * dx + dy * dy);
-    float angle = std::atan2(dy, dx) * 180.f / 3.14159f;
-
-    sf::RectangleShape lineShape(sf::Vector2f(length, thickness));
-    lineShape.setPosition(sf::Vector2f(x1, y1));
-    lineShape.setRotation(sf::degrees(angle));
-    lineShape.setFillColor(stroke_color);
-
-    window.draw(lineShape);
-}
-
-// --- Render Polygon ---
-void SVGRenderer::renderPolygon(const Polygon& polygon) {
-    // 1. Phân tích chuỗi "points"
-    std::istringstream iss(polygon.getPoints());
-    std::vector<sf::Vector2f> points;
-    float x, y;
-    char comma;
-
-    while (iss >> x) {
-        if (iss.peek() == ',') iss >> comma;
-        if (iss >> y) {
-            points.emplace_back(x, y);
-        }
-        else break;
-    }
-
-    if (points.size() < 3) return;
-
-    // 2. Tạo hình dạng SFML (ConvexShape)
-    sf::ConvexShape shape;
-    shape.setPointCount(points.size());
-    for (size_t i = 0; i < points.size(); ++i) {
-        shape.setPoint(i, points[i]);
-    }
-
-    // 3. Áp dụng Thuộc tính 
-    const auto& attributes = polygon.getAttributes();
-
-    // Fill & Opacity
-    auto it_fill = attributes.find("fill");
-    std::string fill_color_str = (it_fill != attributes.end()) ? it_fill->second : "black";
-    sf::Color fillColor = stringToColor(fill_color_str, "fill");
-    fillColor = applyOpacity(fillColor, attributes, "fill-opacity");
-    shape.setFillColor(fillColor);
-
-    // Stroke & Opacity
-    auto it_stroke = attributes.find("stroke");
-    std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "none";
-    sf::Color strokeColor = stringToColor(stroke_color_str, "stroke");
-    strokeColor = applyOpacity(strokeColor, attributes, "stroke-opacity");
     shape.setOutlineColor(strokeColor);
 
     // Stroke Width
     auto it_width = attributes.find("stroke-width");
     float thickness = 1.f;
-    if (it_width != attributes.end()) {
-        try {
+    if (it_width != attributes.end())
+    {
+        try
+        {
             thickness = std::stof(it_width->second);
         }
-        catch (...) { /* giữ giá trị mặc định */ }
+        catch (...)
+        { /* giữ giá trị mặc định */
+        }
     }
-    shape.setOutlineThickness((stroke_color_str == "none" || strokeColor.a == 0) ? 0.f : thickness);
+    shape.setOutlineThickness((stroke_color_str == "none") ? 0.f : thickness);
 
     window.draw(shape);
 }
 
-// --- Render Path (Giữ nguyên) ---
-void SVGRenderer::renderPath(const Path& path) {
-    const auto& attributes = path.getAttributes();
+// --- Render Line ---
+void SVGRenderer::renderLine(const Line &line)
+{
+    float x1 = static_cast<float>(line.getX1());
+    float y1 = static_cast<float>(line.getY1());
+    float x2 = static_cast<float>(line.getX2());
+    float y2 = static_cast<float>(line.getY2());
 
-    // Vẽ hình chữ nhật đại diện
-    sf::RectangleShape shape(sf::Vector2f(50.f, 50.f));
-    shape.setPosition(sf::Vector2f(0.f, 0.f)); // Đặt ở góc
+    const auto &attributes = line.getAttributes();
 
-    // Fill
-    auto it_fill = attributes.find("fill");
-    std::string fill_color_str = (it_fill != attributes.end()) ? it_fill->second : "black";
-    shape.setFillColor(stringToColor(fill_color_str, "fill"));
+    // 1. XỬ LÝ ĐỘ DÀY
+    auto it_width = attributes.find("stroke-width");
+    float thickness = 1.f;
+    if (it_width != attributes.end())
+    {
+        try
+        {
+            thickness = std::stof(it_width->second);
+        }
+        catch (...)
+        {
+            thickness = 1.f;
+        }
+    }
 
-    // Thêm một viền màu đỏ để báo hiệu đây là "Path giả"
-    shape.setOutlineColor(sf::Color::Red);
-    shape.setOutlineThickness(5.f);
+    // 2. XỬ LÝ MÀU
+    auto it_stroke = attributes.find("stroke");
+    std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "black";
+    sf::Color strokeColor = stringToColor(stroke_color_str, "stroke");
+    float strokeOpacity = getOpacity(attributes, "stroke-opacity");
+    strokeColor.a = static_cast<std::uint8_t>(strokeOpacity * 255);
 
-    window.draw(shape);
+    if (strokeColor.a == 0 || thickness <= 0.f)
+        return;
+
+    // 3. TÍNH TOÁN HÌNH HỌC
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    float length = std::sqrt(dx * dx + dy * dy);
+    float angle = std::atan2(dy, dx) * 180.f / 3.14159f;
+
+    // 4. TẠO HÌNH & CHỈNH TÂM
+    sf::RectangleShape lineShape(sf::Vector2f(length, thickness));
+
+    // [QUAN TRỌNG] Đặt tâm về giữa cạnh trái (0, thickness/2)
+    // Điều này giúp đường thẳng dày được vẽ đều sang hai bên trục
+    lineShape.setOrigin(sf::Vector2f(0.f, thickness / 2.f));
+
+    lineShape.setPosition(sf::Vector2f(x1, y1));
+    lineShape.setRotation(sf::degrees(angle));
+    lineShape.setFillColor(strokeColor);
+
+    window.draw(lineShape);
 }
+// --- Render Polygon ---
+void SVGRenderer::renderPolygon(const Polygon &polygon)
+{
+    // 1. Phân tích chuỗi "points" (Ví dụ: "10,10 20,20 30,10")
+    std::istringstream iss(polygon.getPoints());
+    std::vector<sf::Vector2f> points;
+    float x, y;
+    char comma;
 
-// --- Render Ellipse (ĐÃ THÊM OPACITY) ---
-void SVGRenderer::renderEllipse(const Ellipse& ellipse) {
-    float rx = static_cast<float>(ellipse.getRx());
-    float ry = static_cast<float>(ellipse.getRy());
-    float cx = static_cast<float>(ellipse.getCx());
-    float cy = static_cast<float>(ellipse.getCy());
+    while (iss >> x)
+    {
+        // Bỏ qua dấu phẩy giữa x và y nếu có
+        if (iss.peek() == ',')
+            iss >> comma;
 
-    float radius = std::max(rx, ry);
+        if (iss >> y)
+        {
+            points.emplace_back(x, y);
+        }
+        else
+            break;
 
-    sf::CircleShape shape(radius);
-
-    shape.setOrigin(sf::Vector2f(radius, radius));
-    shape.setPosition(sf::Vector2f(cx, cy));
-
-    if (radius > 0.0f) {
-        shape.setScale(sf::Vector2f(rx / radius, ry / radius));
+        // Bỏ qua dấu phẩy sau cặp tọa độ nếu có (cho cặp tiếp theo)
+        if (iss.peek() == ',')
+            iss >> comma;
     }
-    else {
-        shape.setScale(sf::Vector2f(0.0f, 0.0f));
+
+    // Cần ít nhất 3 điểm để tạo thành đa giác
+    if (points.size() < 3)
+        return;
+
+    // 2. Tạo hình dạng SFML (ConvexShape)
+    sf::ConvexShape shape;
+    shape.setPointCount(points.size());
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+        shape.setPoint(i, points[i]); // points[i] đã là sf::Vector2f
     }
 
-    const auto& attributes = ellipse.getAttributes();
+    const auto &attributes = polygon.getAttributes();
 
-    // 1. FILL COLOR & OPACITY
+    // --- 3. XỬ LÝ MÀU FILL & OPACITY ---
     auto it_fill = attributes.find("fill");
+    // Mặc định là màu đen (chuẩn SVG) thay vì màu xanh debug cũ
     std::string fill_color_str = (it_fill != attributes.end()) ? it_fill->second : "black";
 
     sf::Color fillColor = stringToColor(fill_color_str, "fill");
-    fillColor = applyOpacity(fillColor, attributes, "fill-opacity"); // Áp dụng opacity
+    float fillOpacity = getOpacity(attributes, "fill-opacity");
+
+    // Ép kiểu std::uint8_t cho SFML 3.0
+    fillColor.a = static_cast<std::uint8_t>(fillOpacity * 255);
+
     shape.setFillColor(fillColor);
 
-    // 2. STROKE COLOR & OPACITY
+    // --- 4. XỬ LÝ MÀU STROKE & OPACITY ---
     auto it_stroke = attributes.find("stroke");
     std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "none";
 
     sf::Color strokeColor = stringToColor(stroke_color_str, "stroke");
-    strokeColor = applyOpacity(strokeColor, attributes, "stroke-opacity"); // Áp dụng opacity
+    float strokeOpacity = getOpacity(attributes, "stroke-opacity");
+
+    // Ép kiểu std::uint8_t
+    strokeColor.a = static_cast<std::uint8_t>(strokeOpacity * 255);
+
     shape.setOutlineColor(strokeColor);
 
-    // 3. STROKE WIDTH
+    // --- 5. XỬ LÝ ĐỘ DÀY VIỀN ---
     auto it_width = attributes.find("stroke-width");
     float thickness = 1.f;
-    if (it_width != attributes.end()) {
-        try {
+    if (it_width != attributes.end())
+    {
+        try
+        {
             thickness = std::stof(it_width->second);
         }
-        catch (...) { /* giữ giá trị mặc định */ }
+        catch (...)
+        {
+            thickness = 1.f;
+        }
     }
-
-    shape.setOutlineThickness((stroke_color_str == "none" || strokeColor.a == 0) ? 0.f : thickness);
+    shape.setOutlineThickness((stroke_color_str == "none") ? 0.f : thickness);
 
     window.draw(shape);
 }
 
-// --- Hàm tiện ích nội bộ (giữ nguyên) ---
-void SVGRenderer::drawLineBetweenPoints(const sf::Vector2f& p1, const sf::Vector2f& p2, const sf::Color& color) {
+// --- Render Path ---
+void SVGRenderer::renderPath(const Path &path)
+{
+    // LƯU Ý: Đây chỉ là hình đại diện (Placeholder).
+    // Phân tích cú pháp chuỗi 'd' của Path rất phức tạp.
+    // Ta vẽ một hình chữ nhật nhỏ tại tọa độ (0,0) hoặc vị trí cố định để báo hiệu.
+
+    // 1. Tạo hình đại diện (Dùng sf::Vector2f cho SFML 3.0)
+    sf::RectangleShape shape(sf::Vector2f(100.f, 100.f));
+    shape.setPosition(sf::Vector2f(50.f, 50.f)); // Đặt tạm tại vị trí dễ thấy
+
+    const auto &attributes = path.getAttributes();
+
+    // --- 2. XỬ LÝ MÀU FILL & OPACITY ---
+    auto it_fill = attributes.find("fill");
+    std::string fill_color_str = (it_fill != attributes.end()) ? it_fill->second : "black";
+
+    sf::Color fillColor = stringToColor(fill_color_str, "fill");
+    float fillOpacity = getOpacity(attributes, "fill-opacity");
+
+    // Ép kiểu std::uint8_t
+    fillColor.a = static_cast<std::uint8_t>(fillOpacity * 255);
+
+    shape.setFillColor(fillColor);
+
+    // --- 3. XỬ LÝ MÀU STROKE & OPACITY ---
+    auto it_stroke = attributes.find("stroke");
+    std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "none";
+
+    sf::Color strokeColor = stringToColor(stroke_color_str, "stroke");
+    float strokeOpacity = getOpacity(attributes, "stroke-opacity");
+
+    strokeColor.a = static_cast<std::uint8_t>(strokeOpacity * 255);
+
+    shape.setOutlineColor(strokeColor);
+
+    // --- 4. XỬ LÝ ĐỘ DÀY VIỀN ---
+    auto it_width = attributes.find("stroke-width");
+    float thickness = 1.f;
+    if (it_width != attributes.end())
+    {
+        try
+        {
+            thickness = std::stof(it_width->second);
+        }
+        catch (...)
+        {
+            thickness = 1.f;
+        }
+    }
+
+    // Nếu không có màu stroke thì độ dày = 0
+    shape.setOutlineThickness((stroke_color_str == "none") ? 0.f : thickness);
+
+    // In ra console để biết là có Path nhưng chưa vẽ chi tiết được
+    // std::cout << "Info: Rendering Path placeholder. Data: " << path.getData().substr(0, 20) << "..." << std::endl;
+
+    window.draw(shape);
+}
+// --- Hàm tiện ích nội bộ (nếu cần) ---
+void SVGRenderer::drawLineBetweenPoints(const sf::Vector2f &p1, const sf::Vector2f &p2, const sf::Color &color)
+{
+    // (Code này chưa được dùng ở trên, nhưng hữu ích nếu bạn muốn render Path chi tiết)
     float dx = p2.x - p1.x;
     float dy = p2.y - p1.y;
     float length = std::sqrt(dx * dx + dy * dy);
     float angle = std::atan2(dy, dx) * 180.f / 3.14159f;
 
-    if (length > 0) {
-        sf::RectangleShape lineShape(sf::Vector2f(length, 1.f));
+    if (length > 0)
+    {
+        sf::RectangleShape lineShape(sf::Vector2f(length, 1.f)); // Dày 1px
         lineShape.setPosition(p1);
         lineShape.setRotation(sf::degrees(angle));
         lineShape.setFillColor(color);
         window.draw(lineShape);
     }
+}
+
+void SVGRenderer::renderEllipse(const Ellipse &ellipse)
+{
+    float cx = static_cast<float>(ellipse.getCx());
+    float cy = static_cast<float>(ellipse.getCy());
+    float rx = static_cast<float>(ellipse.getRx());
+    float ry = static_cast<float>(ellipse.getRy());
+
+    // Chỉ vẽ nếu bán kính hợp lệ
+    if (rx <= 0 || ry <= 0)
+        return;
+
+    // 1. TẠO HÌNH TRÒN CƠ SỞ (Dựa trên bán kính X)
+    sf::CircleShape shape(rx);
+
+    // 2. ĐẶT TÂM (ORIGIN) VỀ GIỮA
+    // (Để khi scale, nó co giãn từ tâm ra chứ không phải từ góc)
+    shape.setOrigin(sf::Vector2f(rx, rx));
+
+    // 3. ĐẶT VỊ TRÍ (Tại tâm cx, cy)
+    shape.setPosition(sf::Vector2f(cx, cy));
+
+    // 4. CO GIÃN (SCALE) ĐỂ BIẾN TRÒN THÀNH ELIP
+    // Giữ nguyên trục X (1.0f), co giãn trục Y theo tỉ lệ (ry / rx)
+    shape.setScale(sf::Vector2f(1.0f, ry / rx));
+
+    const auto &attributes = ellipse.getAttributes();
+
+    // --- 5. XỬ LÝ MÀU FILL & OPACITY ---
+    auto it_fill = attributes.find("fill");
+    std::string fill_color_str = (it_fill != attributes.end()) ? it_fill->second : "black";
+
+    sf::Color fillColor = stringToColor(fill_color_str, "fill");
+    float fillOpacity = getOpacity(attributes, "fill-opacity");
+
+    // Ép kiểu std::uint8_t cho SFML 3.0
+    fillColor.a = static_cast<std::uint8_t>(fillOpacity * 255);
+
+    shape.setFillColor(fillColor);
+
+    // --- 6. XỬ LÝ MÀU STROKE & OPACITY ---
+    auto it_stroke = attributes.find("stroke");
+    std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "none";
+
+    sf::Color strokeColor = stringToColor(stroke_color_str, "stroke");
+    float strokeOpacity = getOpacity(attributes, "stroke-opacity");
+
+    strokeColor.a = static_cast<std::uint8_t>(strokeOpacity * 255);
+
+    shape.setOutlineColor(strokeColor);
+
+    // --- 7. XỬ LÝ ĐỘ DÀY VIỀN ---
+    auto it_width = attributes.find("stroke-width");
+    float thickness = 1.f;
+    if (it_width != attributes.end())
+    {
+        try
+        {
+            thickness = std::stof(it_width->second);
+        }
+        catch (...)
+        {
+            thickness = 1.f;
+        }
+    }
+
+    // Lưu ý: Khi scale hình, độ dày viền cũng bị scale theo (viền ngang và dọc sẽ không đều nhau).
+    // Đây là hạn chế của SFML khi dùng setScale, nhưng chấp nhận được ở mức cơ bản.
+    shape.setOutlineThickness((stroke_color_str == "none") ? 0.f : thickness);
+
+    window.draw(shape);
+}
+// --- Render Text ---
+void SVGRenderer::renderText(const Text &text)
+{
+    // Tạo đối tượng Text của SFML
+    // (Biến 'font' phải được load thành công trong Constructor rồi nhé!)
+    sf::Text sfText(font);
+
+    sfText.setString(text.getContent());
+    sfText.setCharacterSize(static_cast<unsigned int>(text.getFontSize()));
+
+    // 1. ĐẶT VỊ TRÍ (Dùng sf::Vector2f cho SFML 3.0)
+    // Lưu ý: SVG vẽ text từ đường baseline (chân chữ), còn SFML vẽ từ góc trên trái.
+    // Để chữ không bị bay lên trên, ta đặt trực tiếp tại (x, y) hoặc điều chỉnh nhẹ.
+    // Ở đây mình đặt trực tiếp để đảm bảo bạn nhìn thấy nó.
+    sfText.setPosition(sf::Vector2f(
+        static_cast<float>(text.getX()),
+        static_cast<float>(text.getY() - text.getFontSize()) // - text.getFontSize() nếu muốn chỉnh theo baseline chuẩn
+        ));
+
+    const auto &attributes = text.getAttributes();
+
+    // --- 2. XỬ LÝ MÀU FILL & OPACITY ---
+    auto it_fill = attributes.find("fill");
+    // Mặc định text màu đen
+    std::string fill_color_str = (it_fill != attributes.end()) ? it_fill->second : "black";
+
+    sf::Color fillColor = stringToColor(fill_color_str, "fill");
+    float fillOpacity = getOpacity(attributes, "fill-opacity");
+
+    // Ép kiểu std::uint8_t cho SFML 3.0
+    fillColor.a = static_cast<std::uint8_t>(fillOpacity * 255);
+
+    sfText.setFillColor(fillColor);
+
+    // --- 3. XỬ LÝ MÀU STROKE & OPACITY (Viền chữ) ---
+    auto it_stroke = attributes.find("stroke");
+    if (it_stroke != attributes.end() && it_stroke->second != "none")
+    {
+
+        sf::Color strokeColor = stringToColor(it_stroke->second, "stroke");
+        float strokeOpacity = getOpacity(attributes, "stroke-opacity");
+
+        // Ép kiểu std::uint8_t
+        strokeColor.a = static_cast<std::uint8_t>(strokeOpacity * 255);
+
+        sfText.setOutlineColor(strokeColor);
+
+        // Xử lý độ dày viền
+        auto it_width = attributes.find("stroke-width");
+        float thickness = 0.5f; // Mặc định viền chữ mảnh thôi
+        if (it_width != attributes.end())
+        {
+            try
+            {
+                thickness = std::stof(it_width->second);
+            }
+            catch (...)
+            {
+            }
+        }
+        sfText.setOutlineThickness(thickness);
+    }
+    else
+    {
+        sfText.setOutlineThickness(0.f);
+    }
+
+    window.draw(sfText);
+}
+
+void SVGRenderer::renderPolyline(const Polyline &polyline)
+{
+    // 1. Tách tọa độ
+    std::istringstream iss(polyline.getPoints());
+    std::vector<sf::Vector2f> points;
+    float x, y;
+    char comma;
+    while (iss >> x)
+    {
+        if (iss.peek() == ',')
+            iss >> comma;
+        if (iss >> y)
+            points.emplace_back(x, y);
+        else
+            break;
+        if (iss.peek() == ',')
+            iss >> comma;
+    }
+
+    if (points.size() < 2)
+        return;
+
+    const auto &attributes = polyline.getAttributes();
+
+    // 2. Lấy thuộc tính Stroke
+    auto it_width = attributes.find("stroke-width");
+    float thickness = 1.f;
+    if (it_width != attributes.end())
+    {
+        try
+        {
+            thickness = std::stof(it_width->second);
+        }
+        catch (...)
+        {
+        }
+    }
+
+    auto it_stroke = attributes.find("stroke");
+    std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "none";
+    sf::Color strokeColor = stringToColor(stroke_color_str, "stroke");
+
+    float strokeOpacity = getOpacity(attributes, "stroke-opacity");
+    strokeColor.a = static_cast<std::uint8_t>(strokeOpacity * 255);
+
+    if (strokeColor.a == 0 || thickness <= 0.f)
+        return;
+
+    // 3. Vẽ từng đoạn thẳng nối tiếp nhau
+    for (size_t i = 0; i < points.size() - 1; ++i)
+    {
+        sf::Vector2f p1 = points[i];
+        sf::Vector2f p2 = points[i + 1];
+
+        float dx = p2.x - p1.x;
+        float dy = p2.y - p1.y;
+        float length = std::sqrt(dx * dx + dy * dy);
+        float angle = std::atan2(dy, dx) * 180.f / 3.14159f;
+
+        sf::RectangleShape lineSeg(sf::Vector2f(length, thickness));
+
+        // Đặt tâm xoay ở giữa cạnh trái để khớp nối đẹp hơn
+        lineSeg.setOrigin(sf::Vector2f(0.f, thickness / 2.f));
+        lineSeg.setPosition(p1);
+        lineSeg.setRotation(sf::degrees(angle));
+        lineSeg.setFillColor(strokeColor);
+
+        window.draw(lineSeg);
+    }
+
+    // Polyline thường không có fill, hoặc fill rất phức tạp với hình hở,
+    // nên ta tạm thời chỉ vẽ stroke ở đây cho đúng yêu cầu hình đỏ.
 }

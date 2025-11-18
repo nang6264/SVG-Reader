@@ -1,0 +1,37 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build SVG Project (SFML)", // Đây là tên task của bạn
+      "type": "shell",
+      "command": "clang++",
+      "args": [
+        "-std=c++17",
+        "-g",
+        // Thư viện SFML
+        "-I/opt/homebrew/include",
+        "-L/opt/homebrew/lib",
+        "-lsfml-graphics",
+        "-lsfml-window",
+        "-lsfml-system",
+        
+        // Các tệp .cpp của bạn (thêm tất cả vào đây)
+        "main.cpp",
+        "SVGElement.cpp",
+        // "Transform.cpp",
+        "SVGParer.cpp", // Tên tệp của bạn, hãy chắc chắn là đúng
+        "SVGRenderer.cpp",
+        // "FileSVGRenderer.cpp",
+
+        // Tệp đầu ra
+        "-o",
+        "build/my_svg_app" // Tên chương trình sẽ chạy
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
+    }
+  ]
+}

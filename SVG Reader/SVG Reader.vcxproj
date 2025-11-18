@@ -104,17 +104,10 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\S-Funn\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\include</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp23</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Users\S-Funn\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies)
-;sfml-graphics-d.lib;
-sfml-window-d.lib
-;sfml-system-d.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -137,7 +130,7 @@ sfml-window-d.lib
     <ClCompile Include="FileSVGRenderer.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SVGElement.cpp" />
-    <ClCompile Include="SVGParser.cpp" />
+    <ClCompile Include="SVGParer.cpp" />
     <ClCompile Include="SVGRenderer.cpp" />
     <ClCompile Include="test_parser.cpp" />
     <ClCompile Include="test_render.cpp" />

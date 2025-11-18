@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug C++ (lldb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/my_svg_renderer",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "lldb",
+      "preLaunchTask": "Build C++ Project"
+    },
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "/Users/mgow/Documents/HK1 - 2025/OOP/SVG-Reader-main/SVG Reader",
+      "program": "/Users/mgow/Documents/HK1 - 2025/OOP/SVG-Reader-main/SVG Reader/build/Debug/outDebug"
+    }
+  ]
+}
