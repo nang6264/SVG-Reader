@@ -119,24 +119,6 @@ void Polygon::draw(SVGRenderer &renderer) const
     renderer.renderPolygon(*this);
 }
 
-// --- Định nghĩa Path ---
-
-Path::Path(const Attributes &attributes) : SVGElement(attributes)
-{
-    // Thuộc tính "d" là một chuỗi, không cần chuyển đổi
-    auto it = attributes.find("d");
-    if (it != attributes.end())
-    {
-        d_ = it->second;
-    }
-}
-
-void Path::draw(SVGRenderer &renderer) const
-{
-    // Gọi hàm renderPath() của renderer
-    renderer.renderPath(*this);
-}
-
 // --- Định nghĩa Ellipse ---
 
 Ellipse::Ellipse(const Attributes &attributes) : SVGElement(attributes)

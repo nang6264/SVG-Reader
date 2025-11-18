@@ -6,21 +6,16 @@
 #include <vector>
 #include <string>
 
-// Khai báo trước các lớp hình dạng (Data Model)
-// Chúng ta KHÔNG include "SVGElement.h" ở đây để tránh phụ thuộc vòng
 class SVGElement;
 class Circle;
 class Rect;
 class Line;
 class Polygon;
-class Path;
 class Ellipse;
 class Text;
 class Polyline;
 
-/**
- * @brief Lớp renderer để hiển thị các phần tử SVG sử dụng SFML
- */
+// Lớp renderer để hiển thị các phần tử SVG sử dụng SFML
 class SVGRenderer {
 private:
     sf::RenderWindow window; // Cửa sổ SFML
@@ -31,7 +26,7 @@ private:
     std::vector<std::shared_ptr<SVGElement>> elements;
 
     //  Hàm tiện ích nội bộ để vẽ đường thẳng (cho Polygon/Path sau này)
-    void drawLineBetweenPoints(const sf::Vector2f& p1, const sf::Vector2f& p2, const sf::Color& color);
+    // void drawLineBetweenPoints(const sf::Vector2f& p1, const sf::Vector2f& p2, const sf::Color& color);
 
     // Hàm tiện ích nội bộ để chuyển đổi màu SVG (string) sang màu SFML
     sf::Color stringToColor(std::string colorStr, std::string type);
@@ -43,7 +38,6 @@ public:
     // Thêm một phần tử (đã được parse) vào danh sách chờ vẽ
     void addElement(std::shared_ptr<SVGElement> element);
 
-    
     // Bắt đầu vòng lặp vẽ chính (main loop)
     void render();
 
@@ -53,7 +47,6 @@ public:
     void renderRect(const Rect& rect);
     void renderLine(const Line& line);
     void renderPolygon(const Polygon& polygon);
-    void renderPath(const Path& path);
     void renderEllipse(const Ellipse& ellipse);
     void renderText(const Text& text);
     void renderPolyline(const Polyline& polyline);
