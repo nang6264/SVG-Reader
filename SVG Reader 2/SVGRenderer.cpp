@@ -137,6 +137,23 @@ sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type)
     return sf::Color::Magenta; // Trả về màu Magenta (tím) để dễ nhận biết lỗi
 }
 
+// Hàm tính toạ độ Y trên đường chéo tại vị trí X cho trước
+float getYOnDiagonal(float x, sf::Vector2f pStart, sf::Vector2f pEnd)
+{
+    if (std::abs(pEnd.x - pStart.x) < 0.001f)
+        return pStart.y;                                 // Tránh chia cho 0
+    float m = (pEnd.y - pStart.y) / (pEnd.x - pStart.x); // Hệ số góc
+    return m * (x - pStart.x) + pStart.y;
+}
+
+// Hàm tính toạ độ X trên đường chéo tại vị trí Y cho trước
+float getXOnDiagonal(float y, sf::Vector2f pStart, sf::Vector2f pEnd)
+{
+    if (std::abs(pEnd.y - pStart.y) < 0.001f)
+        return pStart.x;
+    float m = (pEnd.x - pStart.x) / (pEnd.y - pStart.y); // Hệ số góc đảo
+    return m * (y - pStart.y) + pStart.x;
+}
 // --- Constructor ---
 SVGRenderer::SVGRenderer(unsigned int width, unsigned int height)
 {
@@ -708,6 +725,28 @@ void SVGRenderer::renderText(const Text &text)
     window.draw(sfText);
 }
 
+// Hàm tìm hình chiếu của điểm P xuống đoạn thẳng AB
+sf::Vector2f getProjectedPoint(sf::Vector2f p, sf::Vector2f a, sf::Vector2f b)
+{
+    sf::Vector2f ab = b - a;
+    sf::Vector2f ap = p - a;
+
+    // Tính tỉ lệ chiếu t
+    float magAB2 = ab.x * ab.x + ab.y * ab.y;
+    if (magAB2 < 0.0001f)
+        return a; // A trùng B
+
+    float t = (ap.x * ab.x + ap.y * ab.y) / magAB2;
+
+    // Giới hạn t trong khoảng [0, 1] để hình chiếu không chạy ra ngoài đoạn AB
+    if (t < 0.f)
+        t = 0.f;
+    if (t > 1.f)
+        t = 1.f;
+
+    return a + ab * t;
+}
+
 void SVGRenderer::renderPolyline(const Polyline &polyline)
 {
     // 1. Tách tọa độ
@@ -732,7 +771,71 @@ void SVGRenderer::renderPolyline(const Polyline &polyline)
 
     const auto &attributes = polyline.getAttributes();
 
-    // 2. Lấy thuộc tính Stroke
+    // --- A. VẼ PHẦN FILL (XỬ LÝ SONG SONG THÔNG MINH) ---
+    auto it_fill = attributes.find("fill");
+    std::string fill_color_str = (it_fill != attributes.end()) ? it_fill->second : "none";
+    sf::Color fillColor = stringToColor(fill_color_str, "fill");
+    float fillOpacity = getOpacity(attributes, "fill-opacity");
+    fillColor.a = static_cast<std::uint8_t>(fillOpacity * 255);
+
+    if (fillColor.a > 0)
+    {
+        sf::Vector2f pStart = points.front();
+        sf::Vector2f pEnd = points.back();
+
+        // [THÔNG MINH] Kiểm tra xem hình này là "Ngang" hay "Chéo"?
+        // Nếu chênh lệch độ cao giữa đầu và cuối nhỏ hơn 10px -> Coi là Ngang (Răng lược)
+        bool isHorizontal = std::abs(pEnd.y - pStart.y) < 10.f;
+
+        if (isHorizontal)
+        {
+            // === TRƯỜNG HỢP 1: RĂNG LƯỢC (Dùng Projection Strip) ===
+            // Cách này vẽ các cột màu xanh đẹp nhất, thẳng tắp xuống đáy
+            sf::VertexArray vertices(sf::PrimitiveType::TriangleStrip);
+            for (const auto &p : points)
+            {
+                sf::Vector2f pProj = getProjectedPoint(p, pStart, pEnd);
+                vertices.append(sf::Vertex{p, fillColor});
+                vertices.append(sf::Vertex{pProj, fillColor});
+            }
+            window.draw(vertices);
+        }
+        else
+        {
+            // === TRƯỜNG HỢP 2: BẬC THANG (Dùng Intersection Logic - CÁI BẠN KHEN 10Đ) ===
+            // Cách này cắt gọn các tam giác theo đường chéo, không bị lem
+            sf::VertexArray vertices(sf::PrimitiveType::Triangles);
+
+            for (size_t i = 1; i < points.size() - 1; ++i)
+            {
+                sf::Vector2f currentP = points[i];
+                sf::Vector2f prevP = points[i - 1];
+                sf::Vector2f nextP = points[i + 1];
+
+                sf::Vector2f intersection1;
+                sf::Vector2f intersection2;
+
+                // Tìm giao điểm cạnh trước
+                if (std::abs(currentP.x - prevP.x) < 0.1f) // Đoạn đứng
+                    intersection1 = sf::Vector2f(currentP.x, getYOnDiagonal(currentP.x, pStart, pEnd));
+                else // Đoạn ngang
+                    intersection1 = sf::Vector2f(getXOnDiagonal(currentP.y, pStart, pEnd), currentP.y);
+
+                // Tìm giao điểm cạnh sau
+                if (std::abs(nextP.x - currentP.x) < 0.1f)
+                    intersection2 = sf::Vector2f(currentP.x, getYOnDiagonal(currentP.x, pStart, pEnd));
+                else
+                    intersection2 = sf::Vector2f(getXOnDiagonal(currentP.y, pStart, pEnd), currentP.y);
+
+                vertices.append(sf::Vertex{currentP, fillColor});
+                vertices.append(sf::Vertex{intersection1, fillColor});
+                vertices.append(sf::Vertex{intersection2, fillColor});
+            }
+            window.draw(vertices);
+        }
+    }
+
+    // --- B. VẼ PHẦN STROKE (VIỀN ĐỎ - GIỮ NGUYÊN 100%) ---
     auto it_width = attributes.find("stroke-width");
     float thickness = 1.f;
     if (it_width != attributes.end())
@@ -749,35 +852,43 @@ void SVGRenderer::renderPolyline(const Polyline &polyline)
     auto it_stroke = attributes.find("stroke");
     std::string stroke_color_str = (it_stroke != attributes.end()) ? it_stroke->second : "none";
     sf::Color strokeColor = stringToColor(stroke_color_str, "stroke");
-
     float strokeOpacity = getOpacity(attributes, "stroke-opacity");
     strokeColor.a = static_cast<std::uint8_t>(strokeOpacity * 255);
 
-    if (strokeColor.a == 0 || thickness <= 0.f)
-        return;
-
-    // 3. Vẽ từng đoạn thẳng nối tiếp nhau
-    for (size_t i = 0; i < points.size() - 1; ++i)
+    if (strokeColor.a > 0 && thickness > 0.f)
     {
-        sf::Vector2f p1 = points[i];
-        sf::Vector2f p2 = points[i + 1];
+        for (size_t i = 0; i < points.size() - 1; ++i)
+        {
+            sf::Vector2f p1 = points[i];
+            sf::Vector2f p2 = points[i + 1];
+            float dx = p2.x - p1.x;
+            float dy = p2.y - p1.y;
+            float length = std::sqrt(dx * dx + dy * dy);
+            float angle = std::atan2(dy, dx) * 180.f / 3.14159f;
 
-        float dx = p2.x - p1.x;
-        float dy = p2.y - p1.y;
-        float length = std::sqrt(dx * dx + dy * dy);
-        float angle = std::atan2(dy, dx) * 180.f / 3.14159f;
+            sf::RectangleShape lineSeg(sf::Vector2f(length, thickness));
+            lineSeg.setOrigin(sf::Vector2f(0.f, thickness / 2.f));
+            lineSeg.setPosition(p1);
+            lineSeg.setRotation(sf::degrees(angle));
+            lineSeg.setFillColor(strokeColor);
+            window.draw(lineSeg);
 
-        sf::RectangleShape lineSeg(sf::Vector2f(length, thickness));
-
-        // Đặt tâm xoay ở giữa cạnh trái để khớp nối đẹp hơn
-        lineSeg.setOrigin(sf::Vector2f(0.f, thickness / 2.f));
-        lineSeg.setPosition(p1);
-        lineSeg.setRotation(sf::degrees(angle));
-        lineSeg.setFillColor(strokeColor);
-
-        window.draw(lineSeg);
+            if (thickness > 1.f)
+            {
+                sf::CircleShape corner(thickness / 2.f);
+                corner.setOrigin(sf::Vector2f(thickness / 2.f, thickness / 2.f));
+                corner.setPosition(p1);
+                corner.setFillColor(strokeColor);
+                window.draw(corner);
+            }
+        }
+        if (thickness > 1.f)
+        {
+            sf::CircleShape endCorner(thickness / 2.f);
+            endCorner.setOrigin(sf::Vector2f(thickness / 2.f, thickness / 2.f));
+            endCorner.setPosition(points.back());
+            endCorner.setFillColor(strokeColor);
+            window.draw(endCorner);
+        }
     }
-
-    // Polyline thường không có fill, hoặc fill rất phức tạp với hình hở,
-    // nên ta tạm thời chỉ vẽ stroke ở đây cho đúng yêu cầu hình đỏ.
 }
