@@ -104,10 +104,16 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>C:\Users\Default\Downloads\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\include</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>C:\Users\Default\Downloads\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);sfml-graphics-d.lib;
+sfml-window-d.lib
+;sfml-system-d.lib;sfml-audio-d.lib;sfml-network-d.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -127,27 +133,21 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FileSVGRenderer.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SVGElement.cpp" />
     <ClCompile Include="SVGParer.cpp" />
     <ClCompile Include="SVGRenderer.cpp" />
-    <ClCompile Include="test_parser.cpp" />
-    <ClCompile Include="test_render.cpp" />
-    <ClCompile Include="Transform.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FileSVGRenderer.h" />
     <ClInclude Include="SVGElement.h" />
     <ClInclude Include="SVGParser.h" />
     <ClInclude Include="SVGRenderer.h" />
-    <ClInclude Include="Transform.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include=".gitkeep" />
-    <None Include="logo.svg" />
-    <None Include="test1.svg" />
+    <None Include="gemini.svg" />
+    <None Include="sample.svg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

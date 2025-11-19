@@ -164,7 +164,7 @@ SVGRenderer::SVGRenderer(unsigned int width, unsigned int height)
     {
         // Nếu trên Mac/Linux không có file này, thử đường dẫn hệ thống
         // Hoặc in ra lỗi để biết
-        std::cerr << "Cảnh báo: Không thể load font arial.ttf! Chữ sẽ không hiện." << std::endl;
+        std::cerr << "Cảnh báo: Không thể load font times.ttf! Chữ sẽ không hiện." << std::endl;
     }
     std::cout << "SVGRenderer: Window created " << width << "x" << height << std::endl;
     std::cout << "Controls: Mouse Wheel = Zoom, R = Rotate, ESC = Exit" << std::endl;

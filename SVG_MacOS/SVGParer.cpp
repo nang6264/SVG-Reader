@@ -105,7 +105,7 @@ bool SVGParser::extractTagAndAttributes(const std::string &line, std::string &ta
         // Kiểm tra ký tự tiếp theo để xem có phải là dấu ngoặc kép không
         // ss >> std::ws đã được xử lý ngầm bởi getline ở vòng sau hoặc ta peek ngay
 
-        char nextChar;
+        char nextChar = ss.peek();
         // Bỏ qua khoảng trắng (nếu có) giữa dấu = và giá trị
         while (ss.good() && std::isspace(ss.peek()))
         {
