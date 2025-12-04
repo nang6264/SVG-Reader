@@ -15,15 +15,17 @@ class SVGElement
 protected:
     // Lưu trữ các thuộc tính của phần tử (ví dụ: "stroke", "fill", "stroke-width")
     Attributes attributes_;
-
+    TransformMatrix transform_;
 public:
+    // Hàm Transform
+    void parseTransform();
     // Constructor cơ bản.
     SVGElement(const Attributes &attributes);
 
     // Destructor ảo (virtual destructor) là bắt buộc cho lớp cơ sở.
     virtual ~SVGElement() = default;
 
-    // ham ve
+    // Hàm vẽ
     virtual void draw(SVGRenderer &renderer) const = 0;
 
     // lay ten phan tu: circle,...
@@ -31,6 +33,8 @@ public:
 
     // Hàm truy cập (getter) đơn giản để lấy thuộc tính
     const Attributes &getAttributes() const { return attributes_; }
+    // Get Transform
+    const TransformMatrix& getTransform() const { return transform_; }
 };
 
 // --- Khai báo các lớp con ---

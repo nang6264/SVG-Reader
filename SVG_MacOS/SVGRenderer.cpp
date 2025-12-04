@@ -8,6 +8,11 @@
 #include <cmath>     // Dùng cho sqrt, atan2
 #include <algorithm> // Dùng cho std::max
 #include <cstdint>   // Dùng uint8_t
+#include "Transform.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
 
 // Hàm giúp đọc giá trị opacity (mặc định là 1.0 - không trong suốt)
 float getOpacity(const std::map<std::string, std::string> &attrs, std::string key)
@@ -167,7 +172,7 @@ SVGRenderer::SVGRenderer(unsigned int width, unsigned int height)
         std::cerr << "Cảnh báo: Không thể load font times.ttf! Chữ sẽ không hiện." << std::endl;
     }
     std::cout << "SVGRenderer: Window created " << width << "x" << height << std::endl;
-    std::cout << "Controls: Mouse Wheel = Zoom, R = Rotate, ESC = Exit" << std::endl;
+    std::cout << "Controls: Mouse Wheel = Zoom, L = Rotate Left, R = Rotate Right, ESC = Exit" << std::endl;
 }
 
 // --- Add Element ---
@@ -198,6 +203,19 @@ void SVGRenderer::rotate(float angle)
     std::cout << "Rotated by " << angle << " degrees" << std::endl;
 }
 
+// --- Hàm tiện ích áp dụng TransformMatrix lên sf::Transform ---
+sf::Transform SVGRenderer::getSFMLTransform(const TransformMatrix& matrix) const {
+    // Truy cập trực tiếp vào m[6] của TransformMatrix (vì TransformMatrix khai báo friend class SVGRenderer)
+    const float* m = matrix.m;
+
+    return sf::Transform(
+        m[0], m[3], m[2], // Hàng 1 (X)
+        m[1], m[4], m[5], // Hàng 2 (Y)
+        0.0f, 0.0f, 1.0f  // Hàng 3 (W)
+    );
+}
+
+
 // --- Render Loop ---
 void SVGRenderer::render()
 {
@@ -217,9 +235,13 @@ void SVGRenderer::render()
                     window.close();
                     std::cout << "Window closed by ESC" << std::endl;
                 }
-                else if (keyEvent->scancode == sf::Keyboard::Scancode::R)
+                else if (keyEvent->scancode == sf::Keyboard::Scancode::L)
                 {
                     rotate(10.f);
+                }
+                else if (keyEvent->scancode == sf::Keyboard::Scancode::R)
+                {
+                    rotate(-10.f);
                 }
             }
             else if (auto *wheelEvent = event->getIf<sf::Event::MouseWheelScrolled>())
@@ -258,6 +280,9 @@ void SVGRenderer::renderCircle(const Circle &circle)
         static_cast<float>(circle.getCy() - r)));
 
     const auto &attributes = circle.getAttributes();
+
+    // --- ÁP DỤNG TRANSFORM ---
+    sf::Transform transform = getSFMLTransform(circle.getTransform());
 
     // --- XỬ LÝ MÀU FILL & OPACITY ---
     auto it_fill = attributes.find("fill");
@@ -308,7 +333,7 @@ void SVGRenderer::renderCircle(const Circle &circle)
     }
     shape.setOutlineThickness((stroke_color_str == "none") ? 0.f : thickness);
 
-    window.draw(shape);
+    window.draw(shape, transform);
 }
 
 // --- Render Rect ---
@@ -324,6 +349,9 @@ void SVGRenderer::renderRect(const Rect &rect)
         static_cast<float>(rect.getY())));
 
     const auto &attributes = rect.getAttributes();
+
+    // --- ÁP DỤNG TRANSFORM ---
+    sf::Transform transform = getSFMLTransform(rect.getTransform());
 
     // Fill
     auto it_fill = attributes.find("fill");
@@ -374,7 +402,7 @@ void SVGRenderer::renderRect(const Rect &rect)
     }
     shape.setOutlineThickness((stroke_color_str == "none") ? 0.f : thickness);
 
-    window.draw(shape);
+    window.draw(shape, transform);
 }
 
 // --- Render Line ---
@@ -386,6 +414,14 @@ void SVGRenderer::renderLine(const Line &line)
     float y2 = static_cast<float>(line.getY2());
 
     const auto &attributes = line.getAttributes();
+
+    // --- ÁP DỤNG TRANSFORM LÊN TỌA ĐỘ TRƯỚC KHI TÍNH GÓC/CHIỀU DÀI ---
+    float t_x1, t_y1, t_x2, t_y2;
+    line.getTransform().transformPoint(x1, y1, t_x1, t_y1);
+    line.getTransform().transformPoint(x2, y2, t_x2, t_y2);
+
+    x1 = t_x1; y1 = t_y1;
+    x2 = t_x2; y2 = t_y2;
 
     // 1. XỬ LÝ ĐỘ DÀY
     auto it_width = attributes.find("stroke-width");
@@ -438,6 +474,10 @@ void SVGRenderer::renderPolygon(const Polygon &polygon)
     float x, y;
     char comma;
 
+    // --- ÁP DỤNG TRANSFORM LÊN TỌA ĐỘ TRƯỚC KHI TẠO HÌNH ---
+    const TransformMatrix& transformMatrix = polygon.getTransform();
+    float t_x, t_y; // Tọa độ đã transform
+
     while (iss >> x)
     {
         // Bỏ qua dấu phẩy giữa x và y nếu có
@@ -446,7 +486,9 @@ void SVGRenderer::renderPolygon(const Polygon &polygon)
 
         if (iss >> y)
         {
-            points.emplace_back(x, y);
+            // Áp dụng biến đổi lên từng điểm
+            transformMatrix.transformPoint(x, y, t_x, t_y);
+            points.emplace_back(t_x, t_y);
         }
         else
             break;
@@ -531,6 +573,9 @@ void SVGRenderer::renderEllipse(const Ellipse &ellipse)
     if (rx <= 0 || ry <= 0)
         return;
 
+    // --- ÁP DỤNG TRANSFORM ---
+    sf::Transform transform = getSFMLTransform(ellipse.getTransform());
+
     // 1. TẠO HÌNH TRÒN CƠ SỞ (Dựa trên bán kính X)
     sf::CircleShape shape(rx);
 
@@ -595,7 +640,7 @@ void SVGRenderer::renderEllipse(const Ellipse &ellipse)
     // Đây là hạn chế của SFML khi dùng setScale, nhưng chấp nhận được ở mức cơ bản.
     shape.setOutlineThickness((stroke_color_str == "none") ? 0.f : thickness);
 
-    window.draw(shape);
+    window.draw(shape, transform);
 }
 // --- Render Text ---
 void SVGRenderer::renderText(const Text &text)
@@ -607,14 +652,15 @@ void SVGRenderer::renderText(const Text &text)
     sfText.setString(text.getContent());
     sfText.setCharacterSize(static_cast<unsigned int>(text.getFontSize()));
 
+    sf::Transform transform = getSFMLTransform(text.getTransform());
     // 1. ĐẶT VỊ TRÍ (Dùng sf::Vector2f cho SFML 3.0)
     // Lưu ý: SVG vẽ text từ đường baseline (chân chữ), còn SFML vẽ từ góc trên trái.
     // Để chữ không bị bay lên trên, ta đặt trực tiếp tại (x, y) hoặc điều chỉnh nhẹ.
     // Ở đây mình đặt trực tiếp để đảm bảo bạn nhìn thấy nó.
     sfText.setPosition(sf::Vector2f(
         static_cast<float>(text.getX()),
-        static_cast<float>(text.getY() - text.getFontSize()) // - text.getFontSize() nếu muốn chỉnh theo baseline chuẩn
-        ));
+        static_cast<float>(text.getY() - sfText.getCharacterSize())
+    ));
 
     const auto &attributes = text.getAttributes();
 
@@ -664,7 +710,7 @@ void SVGRenderer::renderText(const Text &text)
         sfText.setOutlineThickness(0.f);
     }
 
-    window.draw(sfText);
+    window.draw(sfText, transform);
 }
 
 // Hàm tìm hình chiếu của điểm P xuống đoạn thẳng AB
@@ -696,12 +742,21 @@ void SVGRenderer::renderPolyline(const Polyline &polyline)
     std::vector<sf::Vector2f> points;
     float x, y;
     char comma;
+
+    // --- ÁP DỤNG TRANSFORM LÊN TỌA ĐỘ TRƯỚC KHI TẠO HÌNH ---
+    const TransformMatrix& transformMatrix = polyline.getTransform();
+    float t_x, t_y; // Tọa độ đã transform
+
     while (iss >> x)
     {
         if (iss.peek() == ',')
             iss >> comma;
         if (iss >> y)
-            points.emplace_back(x, y);
+        {
+            // Áp dụng biến đổi lên từng điểm
+            transformMatrix.transformPoint(x, y, t_x, t_y);
+            points.emplace_back(t_x, t_y);
+        }
         else
             break;
         if (iss.peek() == ',')

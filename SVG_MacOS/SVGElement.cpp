@@ -1,5 +1,6 @@
 // SVGElement.cpp
 #include "SVGElement.h"
+#include "Transform.h"
 #include <iostream> // Để sử dụng std::stod
 
 // Hàm tiện ích để chuyển string sang double an toàn (nếu cần)
@@ -16,11 +17,30 @@ double safeStod(const std::string &s)
     }
 }
 
+void SVGElement::parseTransform()
+{
+    auto it = attributes_.find("transform");
+    if (it != attributes_.end())
+    {
+        try
+        {
+            // Gọi hàm parse static của TransformMatrix để chuyển chuỗi thành ma trận
+            transform_ = TransformMatrix::parse(it->second);
+        }
+        catch (...)
+        {
+            std::cerr << "Cảnh báo: Lỗi phân tích thuộc tính transform: " << it->second << std::endl;
+            // Giữ nguyên transform_ là Identity Matrix
+        }
+    }
+}
+
 // --- Định nghĩa SVGElement ---
 
 SVGElement::SVGElement(const Attributes &attributes) : attributes_(attributes)
 {
     // Có thể thực hiện xử lý hoặc kiểm tra các thuộc tính chung ở đây
+    parseTransform();
 }
 
 // --- Định nghĩa Circle ---

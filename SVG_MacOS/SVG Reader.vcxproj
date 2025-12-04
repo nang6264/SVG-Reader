@@ -104,16 +104,14 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\Default\Downloads\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\include</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Users\S-Funn\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\include</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Users\Default\Downloads\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);sfml-graphics-d.lib;
-sfml-window-d.lib
-;sfml-system-d.lib;sfml-audio-d.lib;sfml-network-d.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Users\S-Funn\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;sfml-audio-d.lib;sfml-network-d.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -137,17 +135,37 @@ sfml-window-d.lib
     <ClCompile Include="SVGElement.cpp" />
     <ClCompile Include="SVGParer.cpp" />
     <ClCompile Include="SVGRenderer.cpp" />
+    <ClCompile Include="Transform.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SVGElement.h" />
     <ClInclude Include="SVGParser.h" />
     <ClInclude Include="SVGRenderer.h" />
+    <ClInclude Include="Transform.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include=".gitkeep" />
-    <None Include="gemini.svg" />
-    <None Include="sample.svg" />
+    <None Include="TestCases\gemini.svg" />
+    <None Include="TestCases\sample.svg" />
+    <None Include="TestCases\svg-01.svg" />
+    <None Include="TestCases\svg-02.svg" />
+    <None Include="TestCases\svg-03.svg" />
+    <None Include="TestCases\svg-04.svg" />
+    <None Include="TestCases\svg-05.svg" />
+    <None Include="TestCases\svg-06.svg" />
+    <None Include="TestCases\svg-07.svg" />
+    <None Include="TestCases\svg-08.svg" />
+    <None Include="TestCases\svg-09.svg" />
+    <None Include="TestCases\svg-10.svg" />
+    <None Include="TestCases\svg-11.svg" />
+    <None Include="TestCases\svg-12.svg" />
+    <None Include="TestCases\svg-13.svg" />
+    <None Include="TestCases\svg-14.svg" />
+    <None Include="TestCases\svg-15.svg" />
+    <None Include="TestCases\svg-16.svg" />
+    <None Include="TestCases\svg-17.svg" />
+    <None Include="TestCases\svg-18.svg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

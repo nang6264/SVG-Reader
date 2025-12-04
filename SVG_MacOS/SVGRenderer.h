@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include "Transform.h"
 
 class SVGElement;
 class Circle;
@@ -31,6 +32,9 @@ private:
     // Hàm tiện ích nội bộ để chuyển đổi màu SVG (string) sang màu SFML
     sf::Color stringToColor(std::string colorStr, std::string type);
     sf::Font font;
+
+    //Chuyển đổi TransformMatrix sang sf::Transform của SFML.
+    sf::Transform getSFMLTransform(const TransformMatrix& matrix) const;
 public:
     // Constructor, tạo cửa sổ SFML
     SVGRenderer(unsigned int width = 800, unsigned int height = 600);
