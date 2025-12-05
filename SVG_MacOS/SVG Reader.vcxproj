@@ -105,7 +105,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>C:\Users\S-Funn\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\include</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -146,26 +146,8 @@
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include=".gitkeep" />
-    <None Include="TestCases\gemini.svg" />
-    <None Include="TestCases\sample.svg" />
-    <None Include="TestCases\svg-01.svg" />
-    <None Include="TestCases\svg-02.svg" />
-    <None Include="TestCases\svg-03.svg" />
-    <None Include="TestCases\svg-04.svg" />
-    <None Include="TestCases\svg-05.svg" />
-    <None Include="TestCases\svg-06.svg" />
-    <None Include="TestCases\svg-07.svg" />
-    <None Include="TestCases\svg-08.svg" />
-    <None Include="TestCases\svg-09.svg" />
-    <None Include="TestCases\svg-10.svg" />
-    <None Include="TestCases\svg-11.svg" />
-    <None Include="TestCases\svg-12.svg" />
-    <None Include="TestCases\svg-13.svg" />
-    <None Include="TestCases\svg-14.svg" />
-    <None Include="TestCases\svg-15.svg" />
-    <None Include="TestCases\svg-16.svg" />
-    <None Include="TestCases\svg-17.svg" />
-    <None Include="TestCases\svg-18.svg" />
+    <None Include="gemini.svg" />
+    <None Include="sample.svg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

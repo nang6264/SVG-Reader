@@ -22,7 +22,7 @@
       <UniqueIdentifier>{c87e1b62-1f3d-45c8-82b5-a769a1af2aeb}</UniqueIdentifier>
     </Filter>
     <Filter Include="TestCases">
-      <UniqueIdentifier>{646057aa-8a3e-4d84-a127-48c66c5dd623}</UniqueIdentifier>
+      <UniqueIdentifier>{6b28e963-0fc4-442a-9f67-a4e9063d03e7}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -59,65 +59,7 @@
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include=".gitkeep" />
-    <None Include="TestCases\gemini.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\sample.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-01.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-02.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-03.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-04.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-05.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-06.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-07.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-08.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-09.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-10.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-11.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-12.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-13.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-14.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-15.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-16.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-17.svg">
-      <Filter>TestCases</Filter>
-    </None>
-    <None Include="TestCases\svg-18.svg">
-      <Filter>TestCases</Filter>
-    </None>
+    <None Include="sample.svg" />
+    <None Include="gemini.svg" />
   </ItemGroup>
 </Project>
