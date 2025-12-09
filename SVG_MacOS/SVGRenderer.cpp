@@ -1,4 +1,4 @@
-﻿// SVGRenderer.cpp
+// SVGRenderer.cpp
 #include "SVGRenderer.h"
 #include "SVGElement.h" // Cần include file này để lấy định nghĩa đầy đủ của các lớp con
 #include <iostream>
@@ -279,10 +279,17 @@ void SVGRenderer::renderCircle(const Circle &circle)
         static_cast<float>(circle.getCx() - r),
         static_cast<float>(circle.getCy() - r)));
 
-    const auto &attributes = circle.getAttributes();
+    // Thay vì circle.getAttributes(), ta dùng hàm getEffectiveAttributes
+    Attributes attributes = getEffectiveAttributes(circle.getAttributes());
+
+    // Lấy ma trận tích lũy từ Stack (của Group cha)
+    TransformMatrix finalMatrix = getCumulativeTransform();
+
+    // Kết hợp với ma trận riêng của Circle
+    finalMatrix.combine(circle.getTransform());
 
     // --- ÁP DỤNG TRANSFORM ---
-    sf::Transform transform = getSFMLTransform(circle.getTransform());
+    sf::Transform transform = getSFMLTransform(finalMatrix);
 
     // --- XỬ LÝ MÀU FILL & OPACITY ---
     auto it_fill = attributes.find("fill");
@@ -348,10 +355,17 @@ void SVGRenderer::renderRect(const Rect &rect)
         static_cast<float>(rect.getX()),
         static_cast<float>(rect.getY())));
 
-    const auto &attributes = rect.getAttributes();
+    // Nếu Rect không có màu fill, nó sẽ tự tìm trong attributes của Group cha
+    Attributes attributes = getEffectiveAttributes(rect.getAttributes());
+
+    // Lấy vị trí/xoay của Group cha
+    TransformMatrix finalMatrix = getCumulativeTransform();
+
+    // Nhân thêm vị trí/xoay của chính hình chữ nhật này
+    finalMatrix.combine(rect.getTransform());
 
     // --- ÁP DỤNG TRANSFORM ---
-    sf::Transform transform = getSFMLTransform(rect.getTransform());
+    sf::Transform transform = getSFMLTransform(finalMatrix);
 
     // Fill
     auto it_fill = attributes.find("fill");
@@ -413,13 +427,20 @@ void SVGRenderer::renderLine(const Line &line)
     float x2 = static_cast<float>(line.getX2());
     float y2 = static_cast<float>(line.getY2());
 
-    const auto &attributes = line.getAttributes();
+    // Lấy thuộc tính gộp (Cha + Con)
+    Attributes attributes = getEffectiveAttributes(line.getAttributes());
 
-    // --- ÁP DỤNG TRANSFORM LÊN TỌA ĐỘ TRƯỚC KHI TÍNH GÓC/CHIỀU DÀI ---
+    // Tính toán Transform tổng hợp (Group * Local)
+    TransformMatrix finalMatrix = getCumulativeTransform();
+    finalMatrix.combine(line.getTransform());
+
+    // Áp dụng Transform lên CÁC ĐIỂM ĐẦU MÚT
+    // Vì ta vẽ Line bằng cách nối 2 điểm, ta cần biến đổi tọa độ 2 điểm này trước
     float t_x1, t_y1, t_x2, t_y2;
-    line.getTransform().transformPoint(x1, y1, t_x1, t_y1);
-    line.getTransform().transformPoint(x2, y2, t_x2, t_y2);
+    finalMatrix.transformPoint(x1, y1, t_x1, t_y1);
+    finalMatrix.transformPoint(x2, y2, t_x2, t_y2);
 
+    // Cập nhật lại tọa độ để tính toán hình học bên dưới
     x1 = t_x1; y1 = t_y1;
     x2 = t_x2; y2 = t_y2;
 
@@ -465,6 +486,7 @@ void SVGRenderer::renderLine(const Line &line)
 
     window.draw(lineShape);
 }
+
 // --- Render Polygon ---
 void SVGRenderer::renderPolygon(const Polygon &polygon)
 {
@@ -474,20 +496,21 @@ void SVGRenderer::renderPolygon(const Polygon &polygon)
     float x, y;
     char comma;
 
-    // --- ÁP DỤNG TRANSFORM LÊN TỌA ĐỘ TRƯỚC KHI TẠO HÌNH ---
-    const TransformMatrix& transformMatrix = polygon.getTransform();
+    // [CHUẨN] Tính ma trận tổng hợp (Group * Local)
+    TransformMatrix finalMatrix = getCumulativeTransform();
+    finalMatrix.combine(polygon.getTransform());
     float t_x, t_y; // Tọa độ đã transform
 
     while (iss >> x)
     {
-        // Bỏ qua dấu phẩy giữa x và y nếu có
-        if (iss.peek() == ',')
-            iss >> comma;
+        // Bỏ qua dấu phẩy giữa x và y (nếu có)
+        if (iss.peek() == ',') iss >> comma;
 
+        // Đọc y
         if (iss >> y)
         {
-            // Áp dụng biến đổi lên từng điểm
-            transformMatrix.transformPoint(x, y, t_x, t_y);
+            // Áp dụng Ma trận tổng hợp lên điểm (x, y)
+            finalMatrix.transformPoint(x, y, t_x, t_y);
             points.emplace_back(t_x, t_y);
         }
         else
@@ -510,7 +533,8 @@ void SVGRenderer::renderPolygon(const Polygon &polygon)
         shape.setPoint(i, points[i]); // points[i] đã là sf::Vector2f
     }
 
-    const auto &attributes = polygon.getAttributes();
+    // Lấy thuộc tính gộp (Cha + Con)
+    Attributes attributes = getEffectiveAttributes(polygon.getAttributes());
 
     // --- 3. XỬ LÝ MÀU FILL & OPACITY ---
     auto it_fill = attributes.find("fill");
@@ -573,8 +597,15 @@ void SVGRenderer::renderEllipse(const Ellipse &ellipse)
     if (rx <= 0 || ry <= 0)
         return;
 
-    // --- ÁP DỤNG TRANSFORM ---
-    sf::Transform transform = getSFMLTransform(ellipse.getTransform());
+    // Lấy thuộc tính gộp (Group + Element)
+    Attributes attributes = getEffectiveAttributes(ellipse.getAttributes());
+
+    // Tính toán Transform tổng hợp (Group * Local)
+    TransformMatrix finalMatrix = getCumulativeTransform();
+    finalMatrix.combine(ellipse.getTransform());
+
+    // SFML Transform
+    sf::Transform transform = getSFMLTransform(finalMatrix);
 
     // 1. TẠO HÌNH TRÒN CƠ SỞ (Dựa trên bán kính X)
     sf::CircleShape shape(rx);
@@ -589,8 +620,6 @@ void SVGRenderer::renderEllipse(const Ellipse &ellipse)
     // 4. CO GIÃN (SCALE) ĐỂ BIẾN TRÒN THÀNH ELIP
     // Giữ nguyên trục X (1.0f), co giãn trục Y theo tỉ lệ (ry / rx)
     shape.setScale(sf::Vector2f(1.0f, ry / rx));
-
-    const auto &attributes = ellipse.getAttributes();
 
     // --- 5. XỬ LÝ MÀU FILL & OPACITY ---
     auto it_fill = attributes.find("fill");
@@ -652,7 +681,6 @@ void SVGRenderer::renderText(const Text &text)
     sfText.setString(text.getContent());
     sfText.setCharacterSize(static_cast<unsigned int>(text.getFontSize()));
 
-    sf::Transform transform = getSFMLTransform(text.getTransform());
     // 1. ĐẶT VỊ TRÍ (Dùng sf::Vector2f cho SFML 3.0)
     // Lưu ý: SVG vẽ text từ đường baseline (chân chữ), còn SFML vẽ từ góc trên trái.
     // Để chữ không bị bay lên trên, ta đặt trực tiếp tại (x, y) hoặc điều chỉnh nhẹ.
@@ -662,7 +690,15 @@ void SVGRenderer::renderText(const Text &text)
         static_cast<float>(text.getY() - sfText.getCharacterSize())
     ));
 
-    const auto &attributes = text.getAttributes();
+    // Lấy thuộc tính gộp (Group + Element)
+    Attributes attributes = getEffectiveAttributes(text.getAttributes());
+
+    // Tính toán Transform tổng hợp (Group * Local)
+    TransformMatrix finalMatrix = getCumulativeTransform();
+    finalMatrix.combine(text.getTransform());
+
+    // SFML Transform
+    sf::Transform transform = getSFMLTransform(finalMatrix);
 
     // --- 2. XỬ LÝ MÀU FILL & OPACITY ---
     auto it_fill = attributes.find("fill");
@@ -735,7 +771,7 @@ sf::Vector2f getProjectedPoint(sf::Vector2f p, sf::Vector2f a, sf::Vector2f b)
     return a + ab * t;
 }
 
-void SVGRenderer::renderPolyline(const Polyline &polyline)
+void SVGRenderer::renderPolyline(const Polyline& polyline)
 {
     // 1. Tách tọa độ
     std::istringstream iss(polyline.getPoints());
@@ -743,18 +779,20 @@ void SVGRenderer::renderPolyline(const Polyline &polyline)
     float x, y;
     char comma;
 
-    // --- ÁP DỤNG TRANSFORM LÊN TỌA ĐỘ TRƯỚC KHI TẠO HÌNH ---
-    const TransformMatrix& transformMatrix = polyline.getTransform();
+    // Tính ma trận tổng hợp (Group * Local)
+    TransformMatrix finalMatrix = getCumulativeTransform();
+    finalMatrix.combine(polyline.getTransform());
     float t_x, t_y; // Tọa độ đã transform
 
     while (iss >> x)
     {
-        if (iss.peek() == ',')
-            iss >> comma;
+        // Bỏ qua dấu phẩy giữa x và y (nếu có)
+        if (iss.peek() == ',') iss >> comma;
+
         if (iss >> y)
         {
-            // Áp dụng biến đổi lên từng điểm
-            transformMatrix.transformPoint(x, y, t_x, t_y);
+            // Áp dụng Ma trận tổng hợp lên điểm (x, y)
+            finalMatrix.transformPoint(x, y, t_x, t_y);
             points.emplace_back(t_x, t_y);
         }
         else
@@ -766,7 +804,8 @@ void SVGRenderer::renderPolyline(const Polyline &polyline)
     if (points.size() < 2)
         return;
 
-    const auto &attributes = polyline.getAttributes();
+    // Lấy thuộc tính gộp (Cha + Con)
+    Attributes attributes = getEffectiveAttributes(polyline.getAttributes());
 
     // --- A. VẼ PHẦN FILL (XỬ LÝ SONG SONG THÔNG MINH) ---
     auto it_fill = attributes.find("fill");
@@ -789,11 +828,11 @@ void SVGRenderer::renderPolyline(const Polyline &polyline)
             // === TRƯỜNG HỢP 1: RĂNG LƯỢC (Dùng Projection Strip) ===
             // Cách này vẽ các cột màu xanh đẹp nhất, thẳng tắp xuống đáy
             sf::VertexArray vertices(sf::PrimitiveType::TriangleStrip);
-            for (const auto &p : points)
+            for (const auto& p : points)
             {
                 sf::Vector2f pProj = getProjectedPoint(p, pStart, pEnd);
-                vertices.append(sf::Vertex{p, fillColor});
-                vertices.append(sf::Vertex{pProj, fillColor});
+                vertices.append(sf::Vertex{ p, fillColor });
+                vertices.append(sf::Vertex{ pProj, fillColor });
             }
             window.draw(vertices);
         }
@@ -824,9 +863,9 @@ void SVGRenderer::renderPolyline(const Polyline &polyline)
                 else
                     intersection2 = sf::Vector2f(getXOnDiagonal(currentP.y, pStart, pEnd), currentP.y);
 
-                vertices.append(sf::Vertex{currentP, fillColor});
-                vertices.append(sf::Vertex{intersection1, fillColor});
-                vertices.append(sf::Vertex{intersection2, fillColor});
+                vertices.append(sf::Vertex{ currentP, fillColor });
+                vertices.append(sf::Vertex{ intersection1, fillColor });
+                vertices.append(sf::Vertex{ intersection2, fillColor });
             }
             window.draw(vertices);
         }
@@ -888,4 +927,69 @@ void SVGRenderer::renderPolyline(const Polyline &polyline)
             window.draw(endCorner);
         }
     }
+}
+
+// Hàm đẩy Context mới vào Stack
+void SVGRenderer::beginElement(const TransformMatrix& elementLocalTransform, const Attributes& elementLocalAttrs) 
+{
+    RenderState newState;
+
+    if (renderStack_.empty()) {
+        // Nếu là phần tử cấp cao nhất, Transform tích lũy = Transform cục bộ
+        newState.cumulativeTransform = elementLocalTransform;
+        newState.inheritedAttributes = elementLocalAttrs;
+    }
+    else {
+        const RenderState& parentState = renderStack_.back();
+
+        // tính cumulative transform: Parent Cumulative * Child Local
+        newState.cumulativeTransform = parentState.cumulativeTransform;
+        newState.cumulativeTransform.combine(elementLocalTransform);
+
+        // tình toán inherited attributes
+        // Bắt đầu từ thuộc tính Cha (đã được merge), sau đó merge với thuộc tính của Element hiện tại
+        newState.inheritedAttributes = parentState.inheritedAttributes;
+
+        // Merge thuộc tính cục bộ của Element hiện tại vào thuộc tính kế thừa mới
+        for (const auto& kv : elementLocalAttrs) {
+            newState.inheritedAttributes[kv.first] = kv.second;
+        }
+    }
+
+    renderStack_.push_back(newState);
+}
+
+// Hàm khôi phục context
+void SVGRenderer::endElement() 
+{
+    if (!renderStack_.empty()) {
+        renderStack_.pop_back();
+    }
+}
+
+// Hàm lấy Transform tổng hợp đang có hiệu lực
+const TransformMatrix& SVGRenderer::getCumulativeTransform() const 
+{
+    if (renderStack_.empty()) {
+        static const TransformMatrix identity;
+        return identity;
+    }
+    return renderStack_.back().cumulativeTransform;
+}
+
+// Hàm lấy Attribute đang có hiệu lực (Merge Stack Top và Element Local)
+Attributes SVGRenderer::getEffectiveAttributes(const Attributes& localAttrs) const 
+{
+    if (renderStack_.empty()) {
+        return localAttrs; // Nếu không có stack (render top-level), trả về thuộc tính cục bộ
+    }
+
+    // Bắt đầu bằng thuộc tính của cha (từ top của Stack)
+    Attributes effective = renderStack_.back().inheritedAttributes;
+
+    // Ghi đè bằng thuộc tính cục bộ (localAttrs)
+    for (const auto& kv : localAttrs) {
+        effective[kv.first] = kv.second;
+    }
+    return effective;
 }
