@@ -272,7 +272,7 @@ bool SVGParser::parseFile(const std::string &filename)
             std::string tagName; Attributes attributes;
             extractTagAndAttributes(segment, tagName, attributes);
 
-            // Tạo Group và đẩy vào Stack
+            // [LOGIC MỚI] Tạo Group và đẩy vào Stack
             auto group = std::make_shared<Group>(attributes);
             Group* groupPtr = group.get(); // Lấy con trỏ thô
 
@@ -294,7 +294,7 @@ bool SVGParser::parseFile(const std::string &filename)
 
         if (element)
         {
-            //  Kiểm tra xem có đang ở trong Group nào không
+            // [SỬA ĐỔI QUAN TRỌNG] Kiểm tra xem có đang ở trong Group nào không
             if (!groupStack.empty()) {
                 groupStack.top()->addElement(std::move(element)); // <--- Nhét vào Group
             }
