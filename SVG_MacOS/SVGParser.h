@@ -7,8 +7,8 @@
 #include <fstream>
 #include <memory>
 #include "SVGElement.h"
-//
-using SVGElementPtr = std::unique_ptr<SVGElement>;
+
+using SVGElementPtr = std::shared_ptr<SVGElement>;
 
 class SVGParser {
 public:
