@@ -2,10 +2,12 @@
 #define SVGRENDERER_H
 
 #include <SFML/Graphics.hpp>
+#include "SVGElement.h"
 #include <memory>
 #include <vector>
 #include <string>
-#include "Transform.h"
+#include <map>
+#include "Transform.h"   // Để dùng TransformMatrix trong RenderState
 
 class SVGElement;
 class Circle;
@@ -16,9 +18,16 @@ class Ellipse;
 class Text;
 class Polyline;
 
+// Định nghĩa struct để lưu trữ trạng thái render (Context)
+struct RenderState {
+    TransformMatrix cumulativeTransform; // Transform tích lũy từ gốc đến hiện tại
+    Attributes inheritedAttributes;      // Các thuộc tính cha (fill, stroke, v.v.)
+};
+
 // Lớp renderer để hiển thị các phần tử SVG sử dụng SFML
 class SVGRenderer {
 private:
+    std::vector<RenderState> renderStack_; // Stack lưu trữ ngữ cảnh vẽ
     sf::RenderWindow window; // Cửa sổ SFML
     sf::View view;           // Camera để zoom/xoay
     
@@ -58,6 +67,18 @@ public:
     void zoomIn();
     void zoomOut();
     void rotate(float angle);
+
+    // Cập nhật Context trước khi vẽ một phần tử Group hoặc Element
+    void beginElement(const TransformMatrix& elementLocalTransform, const Attributes& elementLocalAttrs);
+
+    // Khôi phục Context sau khi vẽ xong
+    void endElement();
+
+    // Hàm lấy Transform tổng hợp đang có hiệu lực
+    const TransformMatrix& getCumulativeTransform() const;
+
+    // Hàm lấy Attribute đang có hiệu lực (Merge Stack Top và Element Local)
+    Attributes getEffectiveAttributes(const Attributes& localAttrs) const;
 };
 
 #endif // SVGRENDERER_H
