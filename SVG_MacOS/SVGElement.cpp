@@ -1,6 +1,7 @@
 // SVGElement.cpp
 #include "SVGElement.h"
 #include "Transform.h"
+#include "SVGRenderer.h"
 #include <iostream> // Để sử dụng std::stod
 
 // Hàm tiện ích để chuyển string sang double an toàn (nếu cần)
