@@ -2,8 +2,12 @@
 #include "SVGParser.h"
 #include <iostream>
 #include <sstream>
+#include <fstream>
+#include <cctype>
 #include <algorithm>
 #include <functional> // Dùng cho std::bind
+#include "Group.h"
+#include <stack>
 
 // Hàm tiện ích: Giải mã các thực thể XML cơ bản
 std::string decodeXMLEntities(std::string text)
@@ -151,27 +155,27 @@ SVGElementPtr SVGParser::parseElementFromLine(const std::string &line)
     // Dựa vào tên tag, tạo đối tượng lớp con tương ứng
     if (tagName == "circle")
     {
-        return std::make_unique<Circle>(attributes);
+        return std::make_shared<Circle>(attributes);
     }
     else if (tagName == "rect")
     {
-        return std::make_unique<Rect>(attributes);
+        return std::make_shared<Rect>(attributes);
     }
     else if (tagName == "line")
     {
-        return std::make_unique<Line>(attributes);
+        return std::make_shared<Line>(attributes);
     }
     else if (tagName == "polygon")
     {
-        return std::make_unique<Polygon>(attributes);
+        return std::make_shared<Polygon>(attributes);
     }
     else if (tagName == "ellipse")
     {
-        return std::make_unique<Ellipse>(attributes);
+        return std::make_shared<Ellipse>(attributes);
     }
     else if (tagName == "polyline")
     {
-        return std::make_unique<Polyline>(attributes);
+        return std::make_shared<Polyline>(attributes);
     }
     // Bỏ qua các tag khác như <svg>, <g>, ...
 
@@ -199,13 +203,24 @@ bool SVGParser::parseFile(const std::string &filename)
         return false;
     }
 
-    // Cách đọc mới: Đọc theo từng cụm thẻ (đến khi gặp dấu '>')
+    // [THÊM MỚI] Stack để theo dõi ta đang ở trong Group nào
+    std::stack<Group*> groupStack;
+
     std::string segment;
     while (std::getline(file, segment, '>'))
     {
         // getline này đọc đến dấu '>', nhưng nó vứt dấu '>' đi.
         // Ta cần cộng lại dấu '>' để thành tag hoàn chỉnh.
         segment += ">";
+
+        // xử lý thẻ đóng group </g> ---
+        if (segment.find("</g>") != std::string::npos) {
+            if (!groupStack.empty()) {
+                groupStack.pop(); // <--- Thoát khỏi Group hiện tại, quay về cha
+            }
+            continue;
+        }
+
         if (segment.find("<text") != std::string::npos && segment.find("/>") == std::string::npos)
         {
 
@@ -224,15 +239,14 @@ bool SVGParser::parseFile(const std::string &filename)
             std::string closingTag;
             std::getline(file, closingTag, '>');
 
-            // 3. Tạo đối tượng Text và thêm vào list
-            // Xóa khoảng trắng thừa trong content (nếu muốn)
-            // content = trim(content);
-            if (!content.empty())
-            {
-                elements_.push_back(std::make_unique<Text>(attributes, content));
+            auto textObj = std::make_shared<Text>(attributes, content);
+            if (!groupStack.empty()) {
+                groupStack.top()->addElement(std::move(textObj)); // Thêm vào Group đang mở
             }
-
-            continue; // Xong thẻ text, quay lại vòng lặp
+            else {
+                elements_.push_back(std::move(textObj)); // Thêm vào root
+            }
+            continue;
         }
         // Kiểm tra xem segment có chứa dấu '<' không (để lọc bỏ khoảng trắng giữa các tag)
         if (segment.find('<') == std::string::npos)
@@ -240,12 +254,53 @@ bool SVGParser::parseFile(const std::string &filename)
             continue;
         }
 
-        // Phân tích cú pháp đoạn tag này
+        // xử lý thẻ mở group <g> ---
+        bool isGroupTag = false;
+        std::string checkStr = segment;
+        checkStr.erase(std::remove_if(checkStr.begin(), checkStr.end(), ::isspace), checkStr.end());
+
+        // Kiểm tra xem có phải <g> thực sự không (tránh nhầm với polygon/image)
+        if (checkStr.find("<g") != std::string::npos &&
+            checkStr.find("</g>") == std::string::npos &&
+            segment.find("polygon") == std::string::npos &&
+            segment.find("image") == std::string::npos)
+        {
+            isGroupTag = true;
+        }
+
+        if (isGroupTag) {
+            std::string tagName; Attributes attributes;
+            extractTagAndAttributes(segment, tagName, attributes);
+
+            // Tạo Group và đẩy vào Stack
+            auto group = std::make_shared<Group>(attributes);
+            Group* groupPtr = group.get(); // Lấy con trỏ thô
+
+            if (!groupStack.empty()) {
+                groupStack.top()->addElement(std::move(group)); // <--- Group con nằm trong Group cha
+            }
+            else {
+                elements_.push_back(std::move(group)); // <--- Group gốc
+            }
+
+            groupStack.push(groupPtr); // <--- Đẩy lên đỉnh Stack để hứng các con tiếp theo
+            continue;
+        }
+
+        // --- 4. [SỬA ĐỔI] XỬ LÝ CÁC HÌNH CƠ BẢN ---
+        if (segment.find('<') == std::string::npos) continue;
+
         SVGElementPtr element = parseElementFromLine(segment);
 
         if (element)
         {
-            elements_.push_back(std::move(element));
+            //  Kiểm tra xem có đang ở trong Group nào không
+            if (!groupStack.empty()) {
+                groupStack.top()->addElement(std::move(element)); // <--- Nhét vào Group
+            }
+            else {
+                elements_.push_back(std::move(element)); // <--- Nhét vào Root
+            }
         }
     }
 
