@@ -104,14 +104,14 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\S-Funn\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Default\Downloads\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp23</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Users\S-Funn\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;sfml-audio-d.lib;sfml-network-d.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Users\Default\Downloads\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -128,26 +128,53 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;sfml-audio.lib;sfml-network.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Group.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SVGElement.cpp" />
     <ClCompile Include="SVGParer.cpp" />
+    <ClCompile Include="SVGPath.cpp" />
     <ClCompile Include="SVGRenderer.cpp" />
     <ClCompile Include="Transform.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Group.h" />
     <ClInclude Include="SVGElement.h" />
     <ClInclude Include="SVGParser.h" />
+    <ClInclude Include="SVGPath.h" />
     <ClInclude Include="SVGRenderer.h" />
     <ClInclude Include="Transform.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include=".gitkeep" />
+    <None Include="build\my_svg_app" />
+    <None Include="build\my_svg_app.dSYM\Contents\Resources\DWARF\my_svg_app" />
+    <None Include="build\my_svg_app.dSYM\Contents\Resources\Relocations\aarch64\my_svg_app.yml" />
+    <None Include="final_test.svg" />
     <None Include="gemini.svg" />
     <None Include="sample.svg" />
+    <None Include="svg-01.svg" />
+    <None Include="svg-02.svg" />
+    <None Include="svg-03.svg" />
+    <None Include="svg-04.svg" />
+    <None Include="svg-05.svg" />
+    <None Include="svg-06.svg" />
+    <None Include="svg-07.svg" />
+    <None Include="svg-08.svg" />
+    <None Include="svg-09.svg" />
+    <None Include="svg-10.svg" />
+    <None Include="svg-11.svg" />
+    <None Include="svg-12.svg" />
+    <None Include="svg-13.svg" />
+    <None Include="svg-14.svg" />
+    <None Include="svg-15.svg" />
+    <None Include="svg-16.svg" />
+    <None Include="svg-17.svg" />
+    <None Include="svg-18.svg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1,5 +1,6 @@
 // SVGParser.cpp
 #include "SVGParser.h"
+#include"SVGPath.h"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -8,6 +9,7 @@
 #include <functional> // Dùng cho std::bind
 #include "Group.h"
 #include <stack>
+
 
 // Hàm tiện ích: Giải mã các thực thể XML cơ bản
 std::string decodeXMLEntities(std::string text)
@@ -176,6 +178,10 @@ SVGElementPtr SVGParser::parseElementFromLine(const std::string &line)
     else if (tagName == "polyline")
     {
         return std::make_shared<Polyline>(attributes);
+    }
+    else if (tagName == "path")
+    {
+        return std::make_shared<Path>(attributes);
     }
     // Bỏ qua các tag khác như <svg>, <g>, ...
 

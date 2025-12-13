@@ -9,7 +9,7 @@
 int main()
 {
     std::string filename;
-    std::cout << "Nhập tên file SVG cần đọc (vd: input.svg): ";
+    std::cout << "input file svg  (vd: input.svg): ";
     std::cin >> filename;
 
     // 1️⃣ Tạo đối tượng parser

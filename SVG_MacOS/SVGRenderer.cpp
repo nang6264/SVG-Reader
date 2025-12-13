@@ -9,10 +9,12 @@
 #include <algorithm> // Dùng cho std::max
 #include <cstdint>   // Dùng uint8_t
 #include "Transform.h"
+#include "SVGPath.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846f
 #endif
+
 
 // Hàm giúp đọc giá trị opacity (mặc định là 1.0 - không trong suốt)
 float getOpacity(const std::map<std::string, std::string> &attrs, std::string key)
@@ -32,117 +34,79 @@ float getOpacity(const std::map<std::string, std::string> &attrs, std::string ke
 }
 
 // Hàm tiện ích chuyển đổi chuỗi màu SVG sang màu SFML
+// SVGRenderer.cpp
+
+// [CẬP NHẬT] Hàm chuyển đổi màu mạnh mẽ hơn
 sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type)
 {
-    // Chuyển sang chữ thường và xóa khoảng trắng
-    std::transform(colorStr.begin(), colorStr.end(), colorStr.begin(), ::tolower);
-    colorStr.erase(std::remove_if(colorStr.begin(), colorStr.end(), ::isspace), colorStr.end());
+    // 1. Chuẩn hóa chuỗi (xóa khoảng trắng, chuyển thường)
+    std::string s = colorStr;
+    s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
+    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
 
-    if (colorStr == "transparent" || colorStr == "none")
-    {
-        return sf::Color::Transparent;
-    }
-    if (colorStr == "black")
-    {
-        return sf::Color::Black;
-    }
-    if (colorStr == "white")
-    {
-        return sf::Color::White;
-    }
-    if (colorStr == "red")
-    {
-        return sf::Color::Red;
-    }
-    if (colorStr == "green")
-    {
-        return sf::Color::Green;
-    }
-    if (colorStr == "blue")
-    {
-        return sf::Color::Blue;
-    }
-    if (colorStr == "yellow")
-    {
-        return sf::Color::Yellow;
-    }
-    if (colorStr == "orange")
-    {
-        return sf::Color(255, 165, 0);
-    }
-    // Xử lý mã Hex
-    if (colorStr.length() > 0 && colorStr[0] == '#')
-    {
-        try
-        {
-            unsigned int hexValue = std::stoul(colorStr.substr(1), nullptr, 16);
-            if (colorStr.length() == 7)
-            { // #RRGGBB
-                return sf::Color(
-                    (hexValue >> 16) & 0xFF, // R
-                    (hexValue >> 8) & 0xFF,  // G
-                    (hexValue) & 0xFF        // B
-                );
-            }
+    // 2. Xử lý "none" và "transparent" ngay lập tức
+    if (s == "none" || s == "transparent") return sf::Color::Transparent;
+
+    // 3. Bảng màu mở rộng (SVG Colors) - Khắc phục lỗi thiếu màu
+    static const std::map<std::string, sf::Color> colors = {
+        {"black", sf::Color::Black}, {"white", sf::Color::White},
+        {"red", sf::Color::Red}, {"green", sf::Color::Green},
+        {"blue", sf::Color::Blue}, {"yellow", sf::Color::Yellow},
+        {"magenta", sf::Color::Magenta}, {"cyan", sf::Color::Cyan},
+        {"gray", sf::Color(128, 128, 128)}, {"grey", sf::Color(128, 128, 128)},
+        {"silver", sf::Color(192, 192, 192)}, {"orange", sf::Color(255, 165, 0)},
+        {"purple", sf::Color(128, 0, 128)}, {"maroon", sf::Color(128, 0, 0)},
+        {"lime", sf::Color(0, 255, 0)}, {"olive", sf::Color(128, 128, 0)},
+        {"navy", sf::Color(0, 0, 128)}, {"teal", sf::Color(0, 128, 128)},
+        {"aqua", sf::Color::Cyan}, {"fuchsia", sf::Color::Magenta},
+        // Các màu nhạt (Light colors)
+        {"lightblue", sf::Color(173, 216, 230)}, {"lightgreen", sf::Color(144, 238, 144)},
+        {"lightgray", sf::Color(211, 211, 211)}, {"lightgrey", sf::Color(211, 211, 211)},
+        {"pink", sf::Color(255, 192, 203)}, {"gold", sf::Color(255, 215, 0)}
+    };
+
+    auto it = colors.find(s);
+    if (it != colors.end()) return it->second;
+
+    // 4. Mã Hex (#RRGGBB hoặc #RGB)
+    if (!s.empty() && s[0] == '#') {
+        s.erase(0, 1);
+        if (s.size() == 3) { // #F00 -> #FF0000
+            std::string temp;
+            for (char c : s) { temp += c; temp += c; }
+            s = temp;
         }
-        catch (...)
-        {
+        if (s.size() >= 6) { // Xử lý cả #RRGGBBAA nếu có
+            unsigned int hexValue;
+            std::stringstream ss;
+            ss << std::hex << s;
+            ss >> hexValue;
+            if (s.size() == 8) // Có Alpha
+                return sf::Color((hexValue >> 24) & 0xFF, (hexValue >> 16) & 0xFF, (hexValue >> 8) & 0xFF, hexValue & 0xFF);
+            else
+                return sf::Color((hexValue >> 16) & 0xFF, (hexValue >> 8) & 0xFF, hexValue & 0xFF);
         }
     }
 
-    if (colorStr.rfind("rgb(", 0) == 0)
-    { // Nếu chuỗi bắt đầu bằng "rgb("
-        try
-        {
-            // Xóa "rgb(" ở đầu và ")" ở cuối
-            std::string values = colorStr.substr(4, colorStr.length() - 5);
-
-            std::stringstream ss(values);
-            std::string segment;
+    // 5. Mã RGB (rgb(255,0,0))
+    if (s.find("rgb(") == 0) {
+        size_t start = 4;
+        size_t end = s.find(')', start);
+        if (end != std::string::npos) {
+            std::string content = s.substr(start, end - start);
+            std::replace(content.begin(), content.end(), ',', ' ');
+            std::stringstream ss(content);
             int r, g, b;
-
-            // Tách R
-            if (std::getline(ss, segment, ','))
-            {
-                r = std::stoi(segment);
-            }
-            else
-                return sf::Color::Magenta; // Lỗi
-
-            // Tách G
-            if (std::getline(ss, segment, ','))
-            {
-                g = std::stoi(segment);
-            }
-            else
-                return sf::Color::Magenta; // Lỗi
-
-            // Tách B
-            if (std::getline(ss, segment))
-            { // Đọc phần còn lại
-                b = std::stoi(segment);
-            }
-            else
-                return sf::Color::Magenta; // Lỗi
-
+            ss >> r >> g >> b;
             return sf::Color(r, g, b);
         }
-        catch (...)
-        {
-            // Lỗi chuyển đổi stoi
-            return sf::Color::Magenta; // Báo lỗi parse
-        }
     }
 
-    // Mặc định
-    if (type == "fill")
-        return sf::Color::Black;
-    if (type == "stroke")
-        return sf::Color::Transparent;
-
-    return sf::Color::Magenta; // Trả về màu Magenta (tím) để dễ nhận biết lỗi
+    // [QUAN TRỌNG] Nếu không tìm thấy màu (lỗi parse), trả về Transparent thay vì Black
+    // Điều này giúp các hình không bị đen xì nếu gặp màu lạ.
+    // Trừ khi type là fill và không có khai báo gì thì SVG mặc định là black (nhưng ta nên để transparent cho đẹp)
+    return sf::Color::Transparent;
 }
-
 // Hàm tính toạ độ Y trên đường chéo tại vị trí X cho trước
 float getYOnDiagonal(float x, sf::Vector2f pStart, sf::Vector2f pEnd)
 {
@@ -977,19 +941,213 @@ const TransformMatrix& SVGRenderer::getCumulativeTransform() const
     return renderStack_.back().cumulativeTransform;
 }
 
+
+// Hàm tiện ích: Xóa khoảng trắng ở đầu chuỗi
+static inline void ltrim(std::string& s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+        }));
+}
+
+// Hàm tiện ích: Xóa khoảng trắng ở cuối chuỗi
+static inline void rtrim(std::string& s) {
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+        }).base(), s.end());
+}
 // Hàm lấy Attribute đang có hiệu lực (Merge Stack Top và Element Local)
-Attributes SVGRenderer::getEffectiveAttributes(const Attributes& localAttrs) const 
+// Hàm lấy Attribute đang có hiệu lực (Merge Stack Top + Element Local + Style CSS)
+Attributes SVGRenderer::getEffectiveAttributes(const Attributes& localAttrs) const
 {
-    if (renderStack_.empty()) {
-        return localAttrs; // Nếu không có stack (render top-level), trả về thuộc tính cục bộ
+    // 1. Bắt đầu với các thuộc tính thừa kế từ Group cha (nếu có)
+    Attributes effectiveAttrs;
+    if (!renderStack_.empty()) {
+        effectiveAttrs = renderStack_.back().inheritedAttributes;
     }
 
-    // Bắt đầu bằng thuộc tính của cha (từ top của Stack)
-    Attributes effective = renderStack_.back().inheritedAttributes;
-
-    // Ghi đè bằng thuộc tính cục bộ (localAttrs)
+    // 2. Ghi đè bằng các thuộc tính riêng của thẻ (ví dụ: fill="red")
     for (const auto& kv : localAttrs) {
-        effective[kv.first] = kv.second;
+        effectiveAttrs[kv.first] = kv.second;
     }
-    return effective;
+
+    // 3. [QUAN TRỌNG] Xử lý thuộc tính "style" (CSS inline)
+    // Ví dụ: style="fill:#ff0000; stroke:none; opacity:0.5"
+    if (effectiveAttrs.count("style")) {
+        std::string styleStr = effectiveAttrs["style"];
+        std::stringstream ss(styleStr);
+        std::string segment;
+
+        // Cắt chuỗi theo dấu chấm phẩy ';'
+        while (std::getline(ss, segment, ';')) {
+            size_t colonPos = segment.find(':');
+            if (colonPos != std::string::npos) {
+                std::string key = segment.substr(0, colonPos);
+                std::string value = segment.substr(colonPos + 1);
+
+                // Xóa khoảng trắng thừa (Trim)
+                ltrim(key); rtrim(key);
+                ltrim(value); rtrim(value);
+
+                // Ghi đè thuộc tính từ style vào danh sách cuối cùng
+                if (!key.empty()) {
+                    effectiveAttrs[key] = value;
+                }
+            }
+        }
+    }
+
+    return effectiveAttrs;
+}
+
+// HÀM MỚI: Tính điểm trên đường cong Bezier bậc 3
+// B(t) = (1-t)^3 P0 + 3(1-t)^2 t P1 + 3(1-t) t^2 P2 + t^3 P3
+sf::Vector2f cubicBezier(float t, sf::Vector2f p0, sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3) {
+    float u = 1 - t;
+    float tt = t * t;
+    float uu = u * u;
+    float uuu = uu * u;
+    float ttt = tt * t;
+
+    sf::Vector2f p = uuu * p0; // (1-t)^3 * P0
+    p += 3 * uu * t * p1;      // 3(1-t)^2 * t * P1
+    p += 3 * u * tt * p2;      // 3(1-t) * t^2 * P2
+    p += ttt * p3;             // t^3 * P3
+
+    return p;
+}
+
+// SVGRenderer.cpp
+void SVGRenderer::renderPath(const Path& path) {
+    const auto& commands = path.getCommands();
+    if (commands.empty()) return;
+
+    // 1. Thuộc tính & Transform
+    Attributes attributes = getEffectiveAttributes(path.getAttributes());
+    TransformMatrix finalMatrix = getCumulativeTransform();
+    finalMatrix.combine(path.getTransform());
+
+    // 2. Màu sắc (Giữ nguyên logic cũ)
+    sf::Color fillColor = sf::Color::Transparent;
+    if (attributes.count("fill")) {
+        std::string s = attributes["fill"];
+        if (s != "none") fillColor = stringToColor(s, "fill");
+    }
+    else {
+        fillColor = sf::Color::Black; // Mặc định SVG
+    }
+    float fillOpacity = getOpacity(attributes, "fill-opacity");
+    if (fillColor != sf::Color::Transparent) fillColor.a = static_cast<uint8_t>(fillOpacity * 255);
+
+    sf::Color strokeColor = sf::Color::Transparent;
+    if (attributes.count("stroke")) {
+        std::string s = attributes["stroke"];
+        if (s != "none") strokeColor = stringToColor(s, "stroke");
+    }
+    float strokeOpacity = getOpacity(attributes, "stroke-opacity");
+    if (strokeColor != sf::Color::Transparent) strokeColor.a = static_cast<uint8_t>(strokeOpacity * 255);
+
+    float strokeWidth = 1.0f;
+    if (attributes.count("stroke-width")) try { strokeWidth = std::stof(attributes["stroke-width"]); }
+    catch (...) {}
+
+    // 3. Phân tách Sub-paths
+    std::vector<std::vector<sf::Vector2f>> subPaths;
+    std::vector<sf::Vector2f> currentPoints;
+    sf::Vector2f currentPos(0, 0);
+    sf::Vector2f startPathPos(0, 0);
+
+    for (const auto& cmd : commands) {
+        char type = cmd.type;
+        const auto& args = cmd.args;
+
+        if ((type == 'M' || type == 'm') && !currentPoints.empty()) {
+            subPaths.push_back(currentPoints);
+            currentPoints.clear();
+        }
+
+        if (type == 'M') { currentPos = sf::Vector2f(args[0], args[1]); startPathPos = currentPos; currentPoints.push_back(currentPos); }
+        else if (type == 'm') { currentPos += sf::Vector2f(args[0], args[1]); startPathPos = currentPos; currentPoints.push_back(currentPos); }
+        else if (type == 'L') { currentPos = sf::Vector2f(args[0], args[1]); currentPoints.push_back(currentPos); }
+        else if (type == 'l') { currentPos += sf::Vector2f(args[0], args[1]); currentPoints.push_back(currentPos); }
+        else if (type == 'H') { currentPos.x = args[0]; currentPoints.push_back(currentPos); }
+        else if (type == 'h') { currentPos.x += args[0]; currentPoints.push_back(currentPos); }
+        else if (type == 'V') { currentPos.y = args[0]; currentPoints.push_back(currentPos); }
+        else if (type == 'v') { currentPos.y += args[0]; currentPoints.push_back(currentPos); }
+        else if (type == 'C') {
+            sf::Vector2f p1(args[0], args[1]), p2(args[2], args[3]), p3(args[4], args[5]);
+            for (int i = 1; i <= 20; ++i) currentPoints.push_back(cubicBezier(i / 20.0f, currentPos, p1, p2, p3));
+            currentPos = p3;
+        }
+        else if (type == 'c') {
+            sf::Vector2f p1 = currentPos + sf::Vector2f(args[0], args[1]);
+            sf::Vector2f p2 = currentPos + sf::Vector2f(args[2], args[3]);
+            sf::Vector2f p3 = currentPos + sf::Vector2f(args[4], args[5]);
+            for (int i = 1; i <= 20; ++i) currentPoints.push_back(cubicBezier(i / 20.0f, currentPos, p1, p2, p3));
+            currentPos = p3;
+        }
+        else if (type == 'Z' || type == 'z') {
+            currentPoints.push_back(startPathPos);
+            currentPos = startPathPos;
+        }
+    }
+    if (!currentPoints.empty()) subPaths.push_back(currentPoints);
+
+    // 4. Vẽ (SỬA LỖI TÔ MÀU & GÓC XOAY)
+    for (auto& points : subPaths) {
+        if (points.empty()) continue;
+
+        // Transform điểm
+        for (auto& p : points) {
+            float tx, ty;
+            finalMatrix.transformPoint(p.x, p.y, tx, ty);
+            p.x = tx; p.y = ty;
+        }
+
+        // [FIX 1] TÔ MÀU TỪ TÂM (Sửa lỗi tô thiếu/lệch)
+        // Ta cần tạo mảng đỉnh có kích thước = (số điểm) + 2 (1 tâm + 1 điểm lặp lại để đóng vòng)
+        if (fillColor.a > 0 && points.size() >= 3) {
+            sf::VertexArray fillVertices(sf::PrimitiveType::TriangleFan, points.size() + 2);
+
+            // Tính tâm trung bình
+            sf::Vector2f center(0, 0);
+            for (const auto& p : points) center += p;
+            center /= (float)points.size();
+
+            // Đỉnh đầu tiên là TÂM
+            fillVertices[0].position = center;
+            fillVertices[0].color = fillColor;
+
+            // Các đỉnh tiếp theo là viền
+            for (size_t i = 0; i < points.size(); ++i) {
+                fillVertices[i + 1].position = points[i];
+                fillVertices[i + 1].color = fillColor;
+            }
+            // Đóng vòng tròn bằng cách lặp lại điểm đầu tiên
+            fillVertices[points.size() + 1].position = points[0];
+            fillVertices[points.size() + 1].color = fillColor;
+
+            window.draw(fillVertices);
+        }
+
+        // [FIX 2] VẼ VIỀN (Sửa lỗi setRotation SFML 3.0)
+        if (strokeColor.a > 0) {
+            for (size_t i = 0; i < points.size() - 1; ++i) {
+                sf::Vector2f p1 = points[i];
+                sf::Vector2f p2 = points[i + 1];
+                sf::Vector2f dir = p2 - p1;
+                float len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+
+                if (len > 0) {
+                    sf::RectangleShape line(sf::Vector2f(len, strokeWidth));
+                    line.setPosition(p1);
+                    line.setFillColor(strokeColor);
+
+                    // SỬA LỖI BIÊN DỊCH: Dùng sf::radians thay vì nhân 180/PI
+                    line.setRotation(sf::radians(std::atan2(dir.y, dir.x)));
+
+                    window.draw(line);
+                }
+            }
+        }
+    }
 }

@@ -52,17 +52,23 @@ TransformMatrix::TransformMatrix() {
 
 void TransformMatrix::combine(const TransformMatrix& other) {
     float a = m[0], b = m[1], c = m[2];
-    float d = m[3], e = m[4], f = m[5];
+    float d = m[3], e = m[4], f = m[5]; 
 
-    // Hàng 1
+    // Ma trận hiện tại (Parent) nhân Ma trận mới (Child/Other)
+    // Công thức chuẩn:
+    // [ a  d  c ]   [ oa od oc ]   [ a*oa+d*ob  a*od+d*oe  a*oc+d*of+c ]
+    // [ b  e  f ] x [ ob oe of ] = [ b*oa+e*ob  b*od+e*oe  b*oc+e*of+f ]
+    // [ 0  0  1 ]   [ 0  0  1  ]   [ 0          0          1           ]
+
+    // Hàng 1 (X)
     m[0] = a * other.m[0] + d * other.m[1];
-    m[1] = b * other.m[0] + e * other.m[1];
-    m[2] = c * other.m[0] + f * other.m[1] + other.m[2];
+    m[3] = a * other.m[3] + d * other.m[4]; // Lưu ý: m[3] là m01 (theo cách dùng trong transformPoint)
+    m[2] = a * other.m[2] + d * other.m[5] + c; // <-- ĐÃ SỬA: Tx bị ảnh hưởng bởi a, d
 
-    // Hàng 2
-    m[3] = a * other.m[3] + d * other.m[4];
+    // Hàng 2 (Y)
+    m[1] = b * other.m[0] + e * other.m[1];
     m[4] = b * other.m[3] + e * other.m[4];
-    m[5] = c * other.m[3] + f * other.m[4] + other.m[5];
+    m[5] = b * other.m[2] + e * other.m[5] + f; // <-- ĐÃ SỬA: Ty bị ảnh hưởng bởi b, e
 }
 
 TransformMatrix TransformMatrix::translate(float x, float y) {

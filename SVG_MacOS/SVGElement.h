@@ -4,8 +4,9 @@
 
 #include <string>
 #include <map>
-#include "SVGRenderer.h" // Cần bao gồm để sử dụng SVGRenderer
-
+//#include "SVGRenderer.h" // Cần bao gồm để sử dụng SVGRenderer
+#include "Transform.h"   // Để dùng TransformMatrix
+class SVGRenderer;
 // Định nghĩa chung cho tất cả các phần tử SVG
 using Attributes = std::map<std::string, std::string>;
 

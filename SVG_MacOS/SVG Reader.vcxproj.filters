@@ -24,6 +24,15 @@
     <Filter Include="TestCases">
       <UniqueIdentifier>{6b28e963-0fc4-442a-9f67-a4e9063d03e7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\Group">
+      <UniqueIdentifier>{26a7fcd1-53c2-4d31-ae08-89261271dffa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\app">
+      <UniqueIdentifier>{706b21ff-7196-41f3-af64-e1493c8b18a3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Path">
+      <UniqueIdentifier>{ad2c45b2-9d8e-4c11-9901-20fea2090d0f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -41,6 +50,12 @@
     <ClCompile Include="Transform.cpp">
       <Filter>src\Transform</Filter>
     </ClCompile>
+    <ClCompile Include="Group.cpp">
+      <Filter>src\Group</Filter>
+    </ClCompile>
+    <ClCompile Include="SVGPath.cpp">
+      <Filter>src\Path</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SVGParser.h">
@@ -55,11 +70,45 @@
     <ClInclude Include="Transform.h">
       <Filter>include</Filter>
     </ClInclude>
+    <ClInclude Include="Group.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="SVGPath.h">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include=".gitkeep" />
     <None Include="sample.svg" />
     <None Include="gemini.svg" />
+    <None Include="build\my_svg_app">
+      <Filter>src\app</Filter>
+    </None>
+    <None Include="build\my_svg_app.dSYM\Contents\Resources\DWARF\my_svg_app">
+      <Filter>src\app</Filter>
+    </None>
+    <None Include="build\my_svg_app.dSYM\Contents\Resources\Relocations\aarch64\my_svg_app.yml">
+      <Filter>src\app</Filter>
+    </None>
+    <None Include="final_test.svg" />
+    <None Include="svg-01.svg" />
+    <None Include="svg-02.svg" />
+    <None Include="svg-03.svg" />
+    <None Include="svg-04.svg" />
+    <None Include="svg-05.svg" />
+    <None Include="svg-06.svg" />
+    <None Include="svg-07.svg" />
+    <None Include="svg-08.svg" />
+    <None Include="svg-09.svg" />
+    <None Include="svg-10.svg" />
+    <None Include="svg-11.svg" />
+    <None Include="svg-12.svg" />
+    <None Include="svg-13.svg" />
+    <None Include="svg-14.svg" />
+    <None Include="svg-15.svg" />
+    <None Include="svg-16.svg" />
+    <None Include="svg-17.svg" />
+    <None Include="svg-18.svg" />
   </ItemGroup>
 </Project>

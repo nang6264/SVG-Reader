@@ -9,6 +9,7 @@
 #include <map>
 #include "Transform.h"   // Để dùng TransformMatrix trong RenderState
 
+class Path;
 class SVGElement;
 class Circle;
 class Rect;
@@ -20,7 +21,7 @@ class Polyline;
 
 // Định nghĩa struct để lưu trữ trạng thái render (Context)
 struct RenderState {
-    TransformMatrix cumulativeTransform; // Transform tích lũy từ gốc đến hiện tại
+    TransformMatrix cumulativeTransform; // Transform tích lũy từ gốc đến hiện tại  
     Attributes inheritedAttributes;      // Các thuộc tính cha (fill, stroke, v.v.)
 };
 
@@ -63,6 +64,8 @@ public:
     void renderEllipse(const Ellipse& ellipse);
     void renderText(const Text& text);
     void renderPolyline(const Polyline& polyline);
+	void renderPath(const Path& path);
+ 
     // --- Điều khiển camera ---
     void zoomIn();
     void zoomOut();
