@@ -5,7 +5,6 @@
 #include <vector>
 #include <string>
 
-
 // Cấu trúc lưu một lệnh đơn lẻ trong Path (ví dụ: M 10 20)
 struct PathCommand {
     char type; // 'M', 'L', 'C', 'Z'
