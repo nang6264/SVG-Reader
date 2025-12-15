@@ -32,6 +32,15 @@ int main()
     // 4️⃣ Tạo renderer SFML
     SVGRenderer renderer(800, 600);
 
+    auto header = parser.getHeader();
+    if (header.hasViewBox) {
+        // Nếu file có viewBox, dùng nó
+        renderer.setViewBox(header.viewBoxX, header.viewBoxY, header.viewBoxWidth, header.viewBoxHeight);
+    }
+    else {
+        // Nếu không, dùng width/height mặc định (bắt đầu từ 0,0)
+        renderer.setViewBox(0, 0, header.width, header.height);
+    }
     // 5️⃣ CHUYỂN GIAO QUYỀN SỞ HỮU: Lấy danh sách phần tử SVG đã parse
     // Sử dụng takeElements() để di chuyển (move) các unique_ptr ra khỏi parser.
     SVGParser::ElementList parsedElements = parser.takeElements();
