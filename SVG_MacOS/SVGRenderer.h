@@ -45,6 +45,9 @@ private:
 
     //Chuyển đổi TransformMatrix sang sf::Transform của SFML.
     sf::Transform getSFMLTransform(const TransformMatrix& matrix) const;
+
+    bool isPanning = false;         // Cờ đánh dấu đang kéo chuột
+    sf::Vector2i lastMousePos;      // Lưu vị trí chuột cũ để tính khoảng cách
 public:
     // Constructor, tạo cửa sổ SFML
     SVGRenderer(unsigned int width = 800, unsigned int height = 600);
@@ -65,6 +68,9 @@ public:
     void renderText(const Text& text);
     void renderPolyline(const Polyline& polyline);
 	void renderPath(const Path& path);
+   
+    // 
+    void setViewBox(float x, float y, float w, float h);
  
     // --- Điều khiển camera ---
     void zoomIn();
