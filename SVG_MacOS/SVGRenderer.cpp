@@ -198,12 +198,57 @@ void drawSharpStroke(sf::RenderWindow& window, const std::vector<sf::Vector2f>& 
 
 // --- Main Class ---
 
+void SVGRenderer::initializeHelpMenu() {
+    sf::Vector2u windowSize = window.getSize();
+
+    float menuWidth = 220.f;
+    float menuHeight = 100.f;
+    float margin = 10.f;
+
+    // Vị trí: Góc Dưới Phải
+    float fixedX = (float)windowSize.x - margin - menuWidth;
+    float fixedY = (float)windowSize.y - margin - menuHeight;
+
+    // --- NỀN MENU ---
+    helpMenuBackground_.setSize({ menuWidth, menuHeight });
+    helpMenuBackground_.setFillColor(sf::Color(30, 30, 30, 200));
+    helpMenuBackground_.setOutlineThickness(1.f);
+    helpMenuBackground_.setOutlineColor(sf::Color(255, 255, 255));
+    helpMenuBackground_.setPosition({ fixedX, fixedY });
+
+    // --- NỘI DUNG TEXT ---
+    std::string menuContent =
+        "[CONTROLS]\n"
+        "Zoom: Mouse Wheel\n"
+        "Rotate: Q / E keys (Left / Right)\n"
+        "Exit: Escape key";
+
+    helpMenuText_.setFont(font); // Đảm bảo font đã load
+    helpMenuText_.setString(menuContent);
+    helpMenuText_.setCharacterSize(14);
+    helpMenuText_.setFillColor(sf::Color::White);
+
+    // Đặt vị trí text (hơi vào trong so với góc của nền)
+    helpMenuText_.setPosition({ fixedX + margin, fixedY + margin });
+}
+
+void SVGRenderer::drawHelpMenu() {
+    sf::View currentView = window.getView();
+    window.setView(window.getDefaultView());
+
+    window.draw(helpMenuBackground_);
+    window.draw(helpMenuText_);
+
+    window.setView(currentView);
+}
+
 // Triển khai các hàm của SVGRenderer
 SVGRenderer::SVGRenderer(unsigned int width, unsigned int height) {
     sf::ContextSettings settings; settings.antiAliasingLevel = 8;
     window.create(sf::VideoMode({ 1200, 800 }), "SVG Renderer", sf::Style::Default, sf::State::Windowed, settings);
     view = window.getDefaultView();
     if (!font.openFromFile("times.ttf")) {}
+    initializeHelpMenu();
 }
 
 // --- Triển khai các hàm thêm phần tử và render ---
@@ -220,8 +265,8 @@ void SVGRenderer::render() {
             if (event->is<sf::Event::Closed>()) window.close();
             else if (auto* k = event->getIf<sf::Event::KeyPressed>()) {
                 if (k->scancode == sf::Keyboard::Scancode::Escape) window.close();
-                else if (k->scancode == sf::Keyboard::Scancode::L) rotate(10.f);
-                else if (k->scancode == sf::Keyboard::Scancode::R) rotate(-10.f);
+                else if (k->scancode == sf::Keyboard::Scancode::Q) rotate(10.f);
+                else if (k->scancode == sf::Keyboard::Scancode::E) rotate(-10.f);
             }
             else if (auto* w = event->getIf<sf::Event::MouseWheelScrolled>()) {
                 w->delta > 0 ? zoomIn() : zoomOut();
@@ -242,6 +287,7 @@ void SVGRenderer::render() {
         window.clear(sf::Color::White);
         window.setView(view);
         for (auto& e : elements) e->draw(*this);
+        drawHelpMenu();
         window.display();
     }
 }
@@ -937,4 +983,5 @@ void SVGRenderer::renderPath(const Path& path) {
 // Context Functions
 void SVGRenderer::beginElement(const TransformMatrix& t, const Attributes& a) { if (renderStack_.empty()) { renderStack_.push_back({ t,a }); } else { RenderState s = renderStack_.back(); s.cumulativeTransform.combine(t); for (auto& k : a)s.inheritedAttributes[k.first] = k.second; renderStack_.push_back(s); } }
 void SVGRenderer::endElement() { if (!renderStack_.empty()) renderStack_.pop_back(); }
+
 const TransformMatrix& SVGRenderer::getCumulativeTransform() const { static TransformMatrix i; return renderStack_.empty() ? i : renderStack_.back().cumulativeTransform; }
