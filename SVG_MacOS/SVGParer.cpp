@@ -84,7 +84,7 @@ bool SVGParser::extractTagAndAttributes(const std::string &line, std::string &ta
 
     // 1. Lấy tên Tag
     ss >> tagName;
-    // std::cout << tagName << " ";
+
     if (tagName.empty())
         return false;
 
@@ -183,10 +183,6 @@ SVGElementPtr SVGParser::parseElementFromLine(const std::string &line)
     {
         return std::make_shared<Path>(attributes);
     }
-    // else if (tagName == "text")
-    // {
-    //     return std::make_shared<Text>(attributes);
-    // }
     // Bỏ qua các tag khác như <svg>, <g>, ...
 
     return nullptr;
@@ -205,6 +201,7 @@ bool SVGParser::isValidFile(const std::string &filename) const
 bool SVGParser::parseFile(const std::string &filename)
 {
     elements_.clear();
+    header_ = SVGHeader();
     std::ifstream file(filename);
 
     if (!file.is_open())
@@ -310,6 +307,41 @@ bool SVGParser::parseFile(const std::string &filename)
             }
             else {
                 elements_.push_back(std::move(element)); // <--- Nhét vào Root
+            }
+        }
+        if (segment.find("<svg") != std::string::npos && segment.find("</svg>") == std::string::npos) {
+            std::string tagName;
+            Attributes attrs;
+            if (extractTagAndAttributes(segment, tagName, attrs)) {
+                // 1. Đọc width/height (nếu có)
+                if (attrs.count("width")) try { header_.width = std::stof(attrs["width"]); }
+                catch (...) {}
+                if (attrs.count("height")) try { header_.height = std::stof(attrs["height"]); }
+                catch (...) {}
+
+                // 2. Đọc viewBox="x y w h"
+                if (attrs.count("viewBox")) {
+                    std::stringstream ss(attrs["viewBox"]);
+                    float vals[4] = { 0 };
+                    int i = 0;
+                    // Đọc 4 số, xử lý dấu phẩy hoặc khoảng trắng
+                    while (ss.good() && i < 4) {
+                        // Bỏ qua dấu phẩy
+                        if (ss.peek() == ',') ss.ignore();
+                        ss >> vals[i];
+                        i++;
+                        // Bỏ qua khoảng trắng sau số
+                        ss >> std::ws;
+                    }
+
+                    if (i == 4) { // Đọc đủ 4 số
+                        header_.viewBoxX = vals[0];
+                        header_.viewBoxY = vals[1];
+                        header_.viewBoxWidth = vals[2];
+                        header_.viewBoxHeight = vals[3];
+                        header_.hasViewBox = true;
+                    }
+                }
             }
         }
     }
