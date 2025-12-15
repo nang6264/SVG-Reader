@@ -14,10 +14,23 @@ class SVGParser {
 public:
     // Khai báo kiểu dữ liệu cho danh sách các phần tử đã phân tích
     using ElementList = std::vector<SVGElementPtr>;
+    struct SVGHeader {
+        float viewBoxX = 0.0f;
+        float viewBoxY = 0.0f;
+        float viewBoxWidth = 0.0f;
+        float viewBoxHeight = 0.0f;
+        bool hasViewBox = false;
 
+        // Kích thước mặc định nếu không có viewBox
+        float width = 800.0f;
+        float height = 600.0f;
+    };
 private:
     // Danh sách các phần tử SVG đã được phân tích thành công
     ElementList elements_;
+
+    // [THÊM MỚI] Biến lưu header
+    SVGHeader header_;
 
     // Phân tích một dòng chứa tag/thuộc tính
     SVGElementPtr parseElementFromLine(const std::string& line);
@@ -37,6 +50,8 @@ public:
     ElementList takeElements();
     // Getter
     const ElementList& getElements() const;
+
+    const SVGHeader& getHeader() const { return header_; }
 };
 //
 #endif // SVG_READER_SVGPARSER_H
