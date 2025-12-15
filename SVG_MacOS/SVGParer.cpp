@@ -54,10 +54,6 @@ static inline std::string trim(const std::string &s)
 }
 
 // --- Triển khai Hàm tiện ích ---
-
-// HÀM TIỆN ÍCH: Trích xuất tên tag và map thuộc tính từ một chuỗi
-// [SVGParser.cpp] Thay thế hàm extractTagAndAttributes
-
 bool SVGParser::extractTagAndAttributes(const std::string& line, std::string& tagName, Attributes& attributes) const
 {
     std::string trimmedLine = trim(line);
@@ -98,7 +94,6 @@ bool SVGParser::extractTagAndAttributes(const std::string& line, std::string& ta
             nextChar = ss.peek();
         }
 
-        // [SỬA LỖI QUAN TRỌNG] Hỗ trợ cả nháy kép (") và nháy đơn (')
         if (nextChar == '"' || nextChar == '\'')
         {
             char quoteType = nextChar; // Lưu loại dấu nháy đang dùng
@@ -219,8 +214,6 @@ bool SVGParser::parseFile(const std::string &filename)
             std::getline(file, content, '<');
             content = decodeXMLEntities(content);
             content = trim(content);
-            // Sau lệnh này, con trỏ file đang đứng ở "</text>" nhưng dấu '<' đã bị bỏ qua.
-            // Chúng ta cần đọc nốt phần "/text>" để dọn dẹp
             std::string closingTag;
             std::getline(file, closingTag, '>');
 

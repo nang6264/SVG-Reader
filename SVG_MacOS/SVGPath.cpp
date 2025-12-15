@@ -6,10 +6,12 @@
 #include <cmath>
 #include "SVGRenderer.h"
 
+// Hàm ti?n ích ki?m tra ký t? có th? là m?t ph?n c?a s?
 bool isNumChar(char c) {
     return std::isdigit(c) || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E';
 }
 
+// --- ??nh ngh?a Path ---
 Path::Path(const Attributes& attributes) : SVGElement(attributes) {
     auto it = attributes.find("d");
     if (it != attributes.end()) {
@@ -18,6 +20,7 @@ Path::Path(const Attributes& attributes) : SVGElement(attributes) {
     }
 }
 
+// Phân tích chu?i l?nh trong thu?c tính "d"
 void Path::parsePathData() {
     size_t i = 0;
     size_t len = d_.length();
@@ -86,4 +89,5 @@ void Path::parsePathData() {
     }
 }
 
+// V? Path s? d?ng SVGRenderer
 void Path::draw(SVGRenderer& renderer) const { renderer.renderPath(*this); }

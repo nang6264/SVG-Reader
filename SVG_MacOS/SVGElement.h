@@ -4,10 +4,9 @@
 
 #include <string>
 #include <map>
-//#include "SVGRenderer.h" // Cần bao gồm để sử dụng SVGRenderer
-#include "Transform.h"   // Để dùng TransformMatrix
+#include "Transform.h"  
 class SVGRenderer;
-// Định nghĩa chung cho tất cả các phần tử SVG
+
 using Attributes = std::map<std::string, std::string>;
 
 // Lớp cơ sở trừu tượng cho tất cả các phần tử SVG (Circle, Rect, v.v.).
@@ -38,7 +37,7 @@ public:
     const TransformMatrix& getTransform() const { return transform_; }
 };
 
-// --- Khai báo các lớp con ---
+
 
 // Biểu diễn phần tử SVG <circle>.
 class Circle : public SVGElement
@@ -151,9 +150,7 @@ public:
     double getRy() const { return ry_; }
 };
 
-/**
- * @brief Biểu diễn phần tử SVG <text>.
- */
+
 class Text : public SVGElement
 {
 private:
@@ -170,15 +167,13 @@ public:
 
     double getX() const { return x_; }
     double getY() const { return y_; }
-    double getDx() const { return dx_; } // [THÊM] Getter
-    double getDy() const { return dy_; } // [THÊM] Getter
+    double getDx() const { return dx_; } 
+    double getDy() const { return dy_; } 
     double getFontSize() const { return fontSize_; }
     const std::string &getContent() const { return content_; }
 };
 
-/**
- * @brief Biểu diễn phần tử SVG <polyline> (Đường gấp khúc hở).
- */
+// Biểu diễn phần tử SVG <polyline>.
 class Polyline : public SVGElement
 {
 private:

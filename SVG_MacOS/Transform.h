@@ -10,12 +10,6 @@
 #define M_PI 3.14159265358979323846f
 #endif
 
-/**
- * @brief Lớp TransformMatrix đại diện cho ma trận biến đổi đồng nhất 3x3 (chỉ lưu 6 giá trị).
- *
- * Lưu trữ theo hàng (row-major), tương thích với thứ tự SFML/OpenGL sau khi chuyển vị.
- * Nhiệm vụ: Xử lý các phép translate, rotate, scale và nhân ma trận tích lũy.
- */
 class TransformMatrix {
 private:
     // Lưu trữ: m11, m12, tx, m21, m22, ty
@@ -37,20 +31,14 @@ public:
     static TransformMatrix scale(float sx, float sy);
     static TransformMatrix scale(float s);
 
-    /**
-     * @brief Áp dụng ma trận biến đổi lên một điểm (x, y).
-     */
     void transformPoint(float x, float y, float& outX, float& outY) const;
 
-    /**
-     * @brief Phân tích chuỗi thuộc tính transform (ví dụ: "translate(10,20) rotate(45)")
-     * @param transformString Chuỗi thuộc tính transform.
-     * @return Ma trận biến đổi tổng hợp (accumulated).
-     */
+    
     static TransformMatrix parse(const std::string& transformString);
 
     // Cho phép SVGRenderer truy cập trực tiếp vào m[6] để chuyển sang sf::Transform
     friend class SVGRenderer;
+
     // Cho phép Member 4 truy cập để kiểm thử.
     friend class TransformMatrixTest;
 };

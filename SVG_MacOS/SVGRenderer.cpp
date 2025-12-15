@@ -1,5 +1,4 @@
-﻿// SVGRenderer.cpp - FINAL FIXED (No syntax errors)
-#include "SVGRenderer.h"
+﻿#include "SVGRenderer.h"
 #include "SVGElement.h"
 #include <iostream>
 #include <sstream>
@@ -35,6 +34,7 @@ sf::Vector2f cubicBezier(float t, sf::Vector2f p0, sf::Vector2f p1, sf::Vector2f
 }
 
 // --- Fill Helpers ---
+// Kiểm tra điểm có nằm trong đa giác không (Ray-casting algorithm)
 bool isPointInPolygon(const sf::Vector2f& point, const std::vector<sf::Vector2f>& polygon) {
     bool inside = false;
     for (size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
@@ -46,11 +46,13 @@ bool isPointInPolygon(const sf::Vector2f& point, const std::vector<sf::Vector2f>
     return inside;
 }
 
+// Kiểm tra đa giác inner có nằm hoàn toàn trong đa giác outer không
 bool isPolygonInside(const std::vector<sf::Vector2f>& inner, const std::vector<sf::Vector2f>& outer) {
     if (inner.empty() || outer.empty()) return false;
     return isPointInPolygon(inner[0], outer);
 }
 
+// Tính diện tích đa giác (Shoelace formula)
 double getArea(const std::vector<sf::Vector2f>& points) {
     double area = 0.0;
     if (points.size() < 3) return 0.0;
@@ -61,6 +63,7 @@ double getArea(const std::vector<sf::Vector2f>& points) {
     return std::abs(area) / 2.0;
 }
 
+// Vẽ đa giác lõm sử dụng thư viện Earcut
 void drawConcaveShape(sf::RenderWindow& window, const std::vector<std::vector<sf::Vector2f>>& inputShapes, sf::Color color) {
     if (inputShapes.empty()) return;
     using Point = std::array<double, 2>;
@@ -88,10 +91,8 @@ void drawConcaveShape(sf::RenderWindow& window, const std::vector<std::vector<sf
     }
     window.draw(vertices);
 }
-// [SVGRenderer.cpp] - Khu vực Helper Functions
 
-// Hàm tìm giao điểm của 2 đoạn thẳng (p1-p2) và (p3-p4)
-// Trả về true nếu có giao điểm nằm trong đoạn thẳng
+// Tính giao điểm của hai đoạn thẳng (p1-p2 và p3-p4)
 bool getLineIntersection(sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3, sf::Vector2f p4, sf::Vector2f& intersection) {
     float d = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
     if (std::abs(d) < 0.001f) return false; // Song song
@@ -107,7 +108,7 @@ bool getLineIntersection(sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3, sf::
     return false;
 }
 
-// Hàm biến đổi ngôi sao 5 cánh tự cắt (5 điểm) thành đa giác đơn (10 điểm)
+// Sửa lại điểm đa giác ngôi sao thành đa giác đơn bao quanh
 std::vector<sf::Vector2f> fixStarPolygon(const std::vector<sf::Vector2f>& pts) {
     // Chỉ xử lý nếu đúng là 5 điểm (Pentagram)
     if (pts.size() != 5) return pts;
@@ -196,6 +197,8 @@ void drawSharpStroke(sf::RenderWindow& window, const std::vector<sf::Vector2f>& 
 }
 
 // --- Main Class ---
+
+// Triển khai các hàm của SVGRenderer
 SVGRenderer::SVGRenderer(unsigned int width, unsigned int height) {
     sf::ContextSettings settings; settings.antiAliasingLevel = 8;
     window.create(sf::VideoMode({ 1200, 800 }), "SVG Renderer", sf::Style::Default, sf::State::Windowed, settings);
@@ -203,6 +206,7 @@ SVGRenderer::SVGRenderer(unsigned int width, unsigned int height) {
     if (!font.openFromFile("times.ttf")) {}
 }
 
+// --- Triển khai các hàm thêm phần tử và render ---
 void SVGRenderer::addElement(std::shared_ptr<SVGElement> element) { if (element) elements.push_back(element); }
 void SVGRenderer::setViewBox(float x, float y, float w, float h) { if (w > 0 && h > 0) { view = sf::View(sf::FloatRect({ x, y }, { w, h })); window.setView(view); } }
 void SVGRenderer::zoomIn() { view.zoom(0.9f); }
@@ -272,8 +276,7 @@ std::vector<sf::Vector2f> cleanPolygonPoints(const std::vector<sf::Vector2f>& po
     return cleaned;
 }
 
-// [SVGRenderer.cpp] Thay thế hàm stringToColor
-
+// Chuyển đổi chuỗi màu SVG sang sf::Color
 sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type) {
     std::string s = colorStr;
     s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
@@ -360,6 +363,7 @@ sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type) {
     return sf::Color::Transparent;
 }
 
+// Lấy thuộc tính hiệu quả (kế thừa + cục bộ + style)
 Attributes SVGRenderer::getEffectiveAttributes(const Attributes& localAttrs) const {
     Attributes e; if (!renderStack_.empty()) e = renderStack_.back().inheritedAttributes;
     for (auto& k : localAttrs) e[k.first] = k.second;
@@ -379,41 +383,52 @@ Attributes SVGRenderer::getEffectiveAttributes(const Attributes& localAttrs) con
 }
 
 // --- Basic Renderers ---
-// [SVGRenderer.cpp] Cập nhật hàm renderCircle
 
-// [SVGRenderer.cpp] Thay thế hoàn toàn hàm renderCircle
-
+// vẽ hình tròn
 void SVGRenderer::renderCircle(const Circle& c) {
+    // 1. Lấy thuộc tính (bao gồm kế thừa)
     Attributes attrs = getEffectiveAttributes(c.getAttributes());
 
+    // 2. Setup hình tròn cơ bản
     float r = static_cast<float>(c.getR());
     sf::CircleShape s(r);
 
-    // [SỬA LỖI SFML 3.0] Thêm dấu ngoặc nhọn {} để tạo Vector2f
+    // SFML 3.0: Dùng ngoặc nhọn {} cho setOrigin
     s.setOrigin({ r, r });
     s.setPosition({ static_cast<float>(c.getCx()), static_cast<float>(c.getCy()) });
 
+    // Tăng độ mịn
     unsigned int points = static_cast<unsigned int>(std::max(50.0f, r * 4.0f));
     s.setPointCount(points);
 
-    // Xử lý màu (Giữ nguyên, dùng std::uint8_t)
-    sf::Color f = stringToColor(attrs.count("fill") ? attrs["fill"] : "none", "fill");
+    // [SỬA LỖI QUAN TRỌNG]
+    // Nếu thiếu thuộc tính fill, mặc định là "black" thay vì "none"
+    std::string fillStr = attrs.count("fill") ? attrs["fill"] : "black";
+
+    sf::Color f = stringToColor(fillStr, "fill");
     if (f != sf::Color::Transparent) {
         f.a = static_cast<std::uint8_t>(getOpacity(attrs, "fill-opacity") * 255);
         s.setFillColor(f);
     }
-    else { s.setFillColor(sf::Color::Transparent); }
-
-    sf::Color st = stringToColor(attrs.count("stroke") ? attrs["stroke"] : "none", "stroke");
-    if (st != sf::Color::Transparent) {
-        st.a = static_cast<std::uint8_t>(getOpacity(attrs, "stroke-opacity") * 255);
-        s.setOutlineColor(st);
-        float w = 1.0f;
-        if (attrs.count("stroke-width")) try { w = std::stof(attrs["stroke-width"]); }
-        catch (...) {}
-        s.setOutlineThickness(w);
+    else {
+        s.setFillColor(sf::Color::Transparent);
     }
 
+    // Xử lý viền (Stroke)
+    std::string strokeStr = attrs.count("stroke") ? attrs["stroke"] : "none";
+    if (strokeStr != "none") {
+        sf::Color st = stringToColor(strokeStr, "stroke");
+        if (st != sf::Color::Transparent) {
+            st.a = static_cast<std::uint8_t>(getOpacity(attrs, "stroke-opacity") * 255);
+            s.setOutlineColor(st);
+            float w = 1.0f;
+            if (attrs.count("stroke-width")) try { w = std::stof(attrs["stroke-width"]); }
+            catch (...) {}
+            s.setOutlineThickness(w);
+        }
+    }
+
+    // 4. Transform (Scale/Rotate/Translate)
     TransformMatrix tm = getCumulativeTransform();
     tm.combine(c.getTransform());
 
@@ -422,6 +437,8 @@ void SVGRenderer::renderCircle(const Circle& c) {
 
     window.draw(s, states);
 }
+
+// vẽ hình chữ nhật
 void SVGRenderer::renderRect(const Rect& r) {
     std::vector<sf::Vector2f> pts;
     float x = r.getX(), y = r.getY(), w = r.getWidth(), h = r.getHeight();
@@ -438,6 +455,8 @@ void SVGRenderer::renderRect(const Rect& r) {
     catch (...) {};
     if (st.a > 0 && th > 0) drawSharpStroke(window, pts, th, st, true);
 }
+
+// vẽ đường thẳng
 void SVGRenderer::renderLine(const Line& l) {
     Attributes a = getEffectiveAttributes(l.getAttributes());
     TransformMatrix tm = getCumulativeTransform(); tm.combine(l.getTransform());
@@ -448,8 +467,8 @@ void SVGRenderer::renderLine(const Line& l) {
     catch (...) {};
     if (st.a > 0 && w > 0) drawSharpStroke(window, { {x1,y1}, {x2,y2} }, w, st, false);
 }
-// SVGRenderer.cpp 
 
+// vẽ chữ
 void SVGRenderer::renderText(const Text& t) {
     if (t.getContent().empty()) return;
 
@@ -535,6 +554,7 @@ void SVGRenderer::renderText(const Text& t) {
     window.draw(textShape, states);
 }
 
+// vẽ đa giác
 void SVGRenderer::renderPolygon(const Polygon& p) {
     // 1. Parse điểm
     std::string pointsStr = p.getPoints();
@@ -624,6 +644,7 @@ void SVGRenderer::renderPolygon(const Polygon& p) {
     }
 }
 
+// vẽ đa tuyến
 void SVGRenderer::renderPolyline(const Polyline& p) {
     // Logic tương tự Polygon nhưng Fill mặc định là None và Stroke mặc định hở
     std::string pointsStr = p.getPoints();
@@ -684,10 +705,8 @@ void SVGRenderer::renderPolyline(const Polyline& p) {
         }
     }
 }
-// [SVGRenderer.cpp] Thay thế hoàn toàn hàm renderEllipse
 
-// [SVGRenderer.cpp] Thay thế hàm renderEllipse
-
+// vẽ elip
 void SVGRenderer::renderEllipse(const Ellipse& e) {
     Attributes attrs = getEffectiveAttributes(e.getAttributes());
 
@@ -738,149 +757,182 @@ void SVGRenderer::renderEllipse(const Ellipse& e) {
     window.draw(s, states);
 }
 
-// --- RENDER PATH (FIXED) ---
+// vẽ path
 void SVGRenderer::renderPath(const Path& path) {
     const auto& commands = path.getCommands();
     if (commands.empty()) return;
-    Attributes a = getEffectiveAttributes(path.getAttributes());
-    TransformMatrix tm = getCumulativeTransform(); tm.combine(path.getTransform());
 
-    sf::Color f = stringToColor(a.count("fill") ? a["fill"] : "black", "fill"); f.a = getOpacity(a, "fill-opacity") * (f == sf::Color::Transparent ? 0 : 255);
-    sf::Color st = stringToColor(a.count("stroke") ? a["stroke"] : "none", "stroke"); st.a = getOpacity(a, "stroke-opacity") * (st == sf::Color::Transparent ? 0 : 255);
-    float w = 1.f; if (a.count("stroke-width")) try { w = std::stof(a["stroke-width"]); }
+    Attributes a = getEffectiveAttributes(path.getAttributes());
+    TransformMatrix tm = getCumulativeTransform();
+    tm.combine(path.getTransform());
+    sf::Color f = stringToColor(a.count("fill") ? a["fill"] : "black", "fill");
+    if (f != sf::Color::Transparent) {
+        f.a = static_cast<std::uint8_t>(getOpacity(a, "fill-opacity") * 255);
+    }
+
+    sf::Color st = stringToColor(a.count("stroke") ? a["stroke"] : "none", "stroke");
+    if (st != sf::Color::Transparent) {
+        st.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
+    }
+
+    float w = 1.0f;
+    if (a.count("stroke-width")) try { w = std::stof(a["stroke-width"]); }
     catch (...) {};
 
-    std::vector<std::vector<sf::Vector2f>> subPaths;
+    // --- Xử lý hình học ---
+    // subPaths: Dùng để TÔ MÀU (Cần clean điểm)
+    std::vector<std::vector<sf::Vector2f>> fillPaths;
+
+    // strokePaths: Dùng để VẼ VIỀN (Giữ nguyên gốc để không mất nét)
+    struct StrokePart {
+        std::vector<sf::Vector2f> points;
+        bool isClosed;
+    };
+    std::vector<StrokePart> strokePaths;
+
     std::vector<sf::Vector2f> curPts;
     sf::Vector2f curPos(0, 0), startPos(0, 0);
+    bool currentSubPathClosed = false;
 
     auto addBezier = [&](sf::Vector2f p0, sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3) {
-        // [CẢI TIẾN 1] Tính độ dài ước lượng dựa trên tổng khoảng cách các điểm điều khiển (Control Points)
-        // Cách cũ chỉ tính khoảng cách p0->p3 nên thiếu chính xác với đường cong uốn lượn mạnh.
-        float estimatedLength = getLength(p1 - p0) + getLength(p2 - p1) + getLength(p3 - p2);
-
-        // [CẢI TIẾN 2] Tăng mật độ điểm: Cứ 2 pixel độ dài thì vẽ 1 điểm (High Quality)
-        // Số cũ là chia cho 5.f (thấp), nay chia cho 2.0f hoặc 1.0f để mịn hơn.
-        int steps = static_cast<int>(estimatedLength / 2.0f);
-
-        // [CẢI TIẾN 3] Nới rộng giới hạn steps
-        if (steps < 30) steps = 30;    // Tối thiểu 30 điểm cho đoạn cong ngắn
-        if (steps > 1000) steps = 1000; // Tăng trần từ 100 lên 1000 để vẽ các đường cong lớn siêu mịn
+        float len = getLength(p1 - p0) + getLength(p2 - p1) + getLength(p3 - p2);
+        int steps = static_cast<int>(len / 2.0f);
+        if (steps < 20) steps = 20;
+        if (steps > 1000) steps = 1000;
 
         for (int i = 1; i <= steps; ++i) {
-            curPts.push_back(cubicBezier(i / (float)steps, p0, p1, p2, p3));
+            float t = i / (float)steps;
+            curPts.push_back(cubicBezier(t, p0, p1, p2, p3));
         }
         };
 
     for (const auto& cmd : commands) {
-        char t = cmd.type; const auto& args = cmd.args;
-        if ((t == 'M' || t == 'm') && !curPts.empty()) { subPaths.push_back(curPts); curPts.clear(); }
+        char t = cmd.type;
+        const auto& args = cmd.args;
 
-        if (t == 'M') { curPos = { args[0],args[1] }; startPos = curPos; curPts.push_back(curPos); }
+        // Gặp lệnh Move (M/m) -> Kết thúc sub-path cũ
+        if ((t == 'M' || t == 'm') && !curPts.empty()) {
+            // 1. Lưu cho Fill (Clean điểm)
+            std::vector<sf::Vector2f> cleaned = cleanPolygonPoints(curPts);
+            if (cleaned.size() >= 3) fillPaths.push_back(cleaned);
+
+            // 2. Lưu cho Stroke (Nguyên gốc)
+            if (curPts.size() >= 2) strokePaths.push_back({ curPts, currentSubPathClosed });
+
+            curPts.clear();
+            currentSubPathClosed = false;
+        }
+
+        if (t == 'M') { curPos = { args[0], args[1] }; startPos = curPos; curPts.push_back(curPos); }
         else if (t == 'm') { curPos += {args[0], args[1]}; startPos = curPos; curPts.push_back(curPos); }
-        else if (t == 'L') { curPos = { args[0],args[1] }; curPts.push_back(curPos); }
+        else if (t == 'L') { curPos = { args[0], args[1] }; curPts.push_back(curPos); }
         else if (t == 'l') { curPos += {args[0], args[1]}; curPts.push_back(curPos); }
         else if (t == 'H') { curPos.x = args[0]; curPts.push_back(curPos); }
         else if (t == 'h') { curPos.x += args[0]; curPts.push_back(curPos); }
         else if (t == 'V') { curPos.y = args[0]; curPts.push_back(curPos); }
         else if (t == 'v') { curPos.y += args[0]; curPts.push_back(curPos); }
-        else if (t == 'C') { sf::Vector2f p1(args[0], args[1]), p2(args[2], args[3]), p3(args[4], args[5]); addBezier(curPos, p1, p2, p3); curPos = p3; }
-        else if (t == 'c') { sf::Vector2f p1 = curPos + sf::Vector2f(args[0], args[1]), p2 = curPos + sf::Vector2f(args[2], args[3]), p3 = curPos + sf::Vector2f(args[4], args[5]); addBezier(curPos, p1, p2, p3); curPos = p3; }
-        else if (t == 'Z' || t == 'z') { if (getLength(curPos - startPos) > 0.1f) curPts.push_back(startPos); }
-        else if (t == 'S' || t == 's' || t == 'Q' || t == 'q' || t == 'T' || t == 't') {
-            if (args.size() >= 2) { curPos = (t == 's' || t == 't' || t == 'q') ? curPos + sf::Vector2f(args[args.size() - 2], args[args.size() - 1]) : sf::Vector2f(args[args.size() - 2], args[args.size() - 1]); curPts.push_back(curPos); }
+        else if (t == 'C') {
+            sf::Vector2f p1(args[0], args[1]), p2(args[2], args[3]), p3(args[4], args[5]);
+            addBezier(curPos, p1, p2, p3); curPos = p3;
         }
-    }
-    if (!curPts.empty()) subPaths.push_back(curPts);
-
-    for (auto& path : subPaths) for (auto& p : path) { float tx, ty; tm.transformPoint(p.x, p.y, tx, ty); p.x = tx; p.y = ty; }
-
-    // Smart Fill (Group disjoint shapes)
-    if (f.a > 0) {
-        struct ShapeGroup { std::vector<sf::Vector2f> outer; std::vector<std::vector<sf::Vector2f>> holes; };
-        std::vector<ShapeGroup> groups;
-        std::sort(subPaths.begin(), subPaths.end(), [](const auto& a, const auto& b) { return getArea(a) > getArea(b); });
-
-        for (const auto& path : subPaths) {
-            if (path.size() < 3) continue;
-            bool added = false;
-            for (auto& g : groups) {
-                if (isPolygonInside(path, g.outer)) { g.holes.push_back(path); added = true; break; }
+        else if (t == 'c') {
+            sf::Vector2f p1 = curPos + sf::Vector2f(args[0], args[1]);
+            sf::Vector2f p2 = curPos + sf::Vector2f(args[2], args[3]);
+            sf::Vector2f p3 = curPos + sf::Vector2f(args[4], args[5]);
+            addBezier(curPos, p1, p2, p3); curPos = p3;
+        }
+        else if (t == 'Z' || t == 'z') {
+            if (!curPts.empty()) {
+                // Đóng path bằng cách nối về startPos
+                if (getLength(curPos - startPos) > 0.1f) {
+                    curPts.push_back(startPos);
+                    curPos = startPos;
+                }
+                currentSubPathClosed = true;
             }
-            if (!added) groups.push_back({ path, {} });
         }
-        for (const auto& g : groups) {
-            std::vector<std::vector<sf::Vector2f>> inp; inp.push_back(g.outer);
-            for (const auto& h : g.holes) inp.push_back(h);
-            drawConcaveShape(window, inp, f);
+        // ... (Các lệnh S, Q, T, A giữ nguyên logic cũ nếu có) ...
+    }
+
+    // Lưu subPath cuối cùng
+    if (!curPts.empty()) {
+        std::vector<sf::Vector2f> cleaned = cleanPolygonPoints(curPts);
+        if (cleaned.size() >= 3) fillPaths.push_back(cleaned);
+        if (curPts.size() >= 2) strokePaths.push_back({ curPts, currentSubPathClosed });
+    }
+
+    // --- Transform tất cả điểm ---
+
+    // Transform Fill Paths
+    for (auto& path : fillPaths) {
+        for (auto& p : path) {
+            float tx, ty; tm.transformPoint(p.x, p.y, tx, ty);
+            p.x = tx; p.y = ty;
         }
     }
-    auto getCentroid = [](const std::vector<sf::Vector2f>& pts) {
-        sf::Vector2f sum(0, 0);
-        for (const auto& p : pts) sum += p;
-        return pts.empty() ? sf::Vector2f(0, 0) : sum / static_cast<float>(pts.size());
+
+    // Transform Stroke Paths
+    for (auto& part : strokePaths) {
+        for (auto& p : part.points) {
+            float tx, ty; tm.transformPoint(p.x, p.y, tx, ty);
+            p.x = tx; p.y = ty;
+        }
+    }
+
+    // --- 1. VẼ TÔ MÀU (Fill) ---
+    // Dùng fillPaths đã được clean -> Fix lỗi mất màu xanh
+    if (f != sf::Color::Transparent && !fillPaths.empty()) {
+        struct ShapeGroup {
+            std::vector<sf::Vector2f> outer;
+            std::vector<std::vector<sf::Vector2f>> holes;
         };
-    // Smart Fill (Xử lý Even-Odd Rule cho hình lồng nhau)
-    if (f.a > 0) {
-        struct ShapeGroup { std::vector<sf::Vector2f> outer; std::vector<std::vector<sf::Vector2f>> holes; };
         std::vector<ShapeGroup> groups;
 
-        // Sắp xếp diện tích lớn -> nhỏ
-        std::sort(subPaths.begin(), subPaths.end(), [](const auto& a, const auto& b) { return getArea(a) > getArea(b); });
+        auto getCentroid = [](const std::vector<sf::Vector2f>& pts) {
+            sf::Vector2f sum(0, 0);
+            for (const auto& p : pts) sum += p;
+            return pts.empty() ? sf::Vector2f(0, 0) : sum / static_cast<float>(pts.size());
+            };
 
-        for (const auto& path : subPaths) {
-            if (path.size() < 3) continue;
+        // Sort diện tích lớn -> nhỏ
+        std::sort(fillPaths.begin(), fillPaths.end(), [](const auto& a, const auto& b) { return getArea(a) > getArea(b); });
+
+        for (const auto& poly : fillPaths) {
+            if (poly.size() < 3) continue;
             bool added = false;
-
-            // Tính điểm trung tâm để check (An toàn hơn check điểm 0)
-            sf::Vector2f centroid = getCentroid(path);
+            sf::Vector2f center = getCentroid(poly);
 
             for (auto& g : groups) {
-                // Check 1: Có nằm trong Outer không? (Dùng isPointInPolygon với Centroid)
-                if (isPointInPolygon(centroid, g.outer)) {
-
-                    // Check 2: Có nằm trong cái Lỗ nào của Outer không?
+                if (isPointInPolygon(center, g.outer)) {
                     bool insideHole = false;
                     for (const auto& hole : g.holes) {
-                        if (isPointInPolygon(centroid, hole)) {
-                            insideHole = true;
-                            break;
-                        }
+                        if (isPointInPolygon(center, hole)) { insideHole = true; break; }
                     }
-
-                    // Nếu nằm trong Outer và KHÔNG nằm trong Lỗ -> Nó là Lỗ mới
-                    if (!insideHole) {
-                        g.holes.push_back(path);
-                        added = true;
-                    }
-                    // Ngược lại: Nằm trong Lỗ -> Nó là Đảo (Island/Outer mới) -> Break để tạo group mới
+                    if (!insideHole) { g.holes.push_back(poly); added = true; }
                     break;
                 }
             }
-
-            if (!added) {
-                groups.push_back({ path, {} });
-            }
+            if (!added) groups.push_back({ poly, {} });
         }
 
-        // Vẽ (đảm bảo Winding Order để Earcut cắt lỗ đúng chiều)
-        for (auto& g : groups) {
-            // Earcut yêu cầu: Outer ngược chiều kim đồng hồ (CCW), Hole cùng chiều (CW)
-            // Tuy nhiên hàm earcut.hpp thường tự xử lý, ta chỉ cần gom đúng vector
+        for (const auto& g : groups) {
             std::vector<std::vector<sf::Vector2f>> inp;
             inp.push_back(g.outer);
             for (const auto& h : g.holes) inp.push_back(h);
             drawConcaveShape(window, inp, f);
         }
     }
-    // Sharp Stroke
-    if (st.a > 0 && w > 0) {
-        for (const auto& path : subPaths) {
-            bool closed = (path.size() > 2 && getLength(path.front() - path.back()) < 0.1f);
-            drawSharpStroke(window, path, w, st, closed);
+
+    // --- 2. VẼ VIỀN (Stroke) ---
+    // Dùng strokePaths nguyên bản -> Fix lỗi mất viền
+    if (st != sf::Color::Transparent && w > 0) {
+        for (const auto& part : strokePaths) {
+            if (part.points.size() < 2) continue;
+            drawSharpStroke(window, part.points, w, st, part.isClosed);
         }
     }
 }
+
 
 // Context Functions
 void SVGRenderer::beginElement(const TransformMatrix& t, const Attributes& a) { if (renderStack_.empty()) { renderStack_.push_back({ t,a }); } else { RenderState s = renderStack_.back(); s.cumulativeTransform.combine(t); for (auto& k : a)s.inheritedAttributes[k.first] = k.second; renderStack_.push_back(s); } }

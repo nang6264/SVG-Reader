@@ -36,9 +36,6 @@ private:
     // Dùng shared_ptr vì Parser (có thể) cũng giữ tham chiếu đến chúng
     std::vector<std::shared_ptr<SVGElement>> elements;
 
-    //  Hàm tiện ích nội bộ để vẽ đường thẳng (cho Polygon/Path sau này)
-    // void drawLineBetweenPoints(const sf::Vector2f& p1, const sf::Vector2f& p2, const sf::Color& color);
-
     // Hàm tiện ích nội bộ để chuyển đổi màu SVG (string) sang màu SFML
     sf::Color stringToColor(std::string colorStr, std::string type);
     sf::Font font;

@@ -1,5 +1,4 @@
-﻿// Transform.cpp - PHIÊN BẢN ĐÃ SỬA LỖI PARSING
-#include "Transform.h"
+﻿#include "Transform.h"
 #include <sstream>
 #include <iostream>
 #include <algorithm>
@@ -15,8 +14,6 @@ namespace {
         auto wsback = std::find_if_not(s.rbegin(), s.rend(), ::isspace).base();
         return (wsback <= wsfront ? std::string() : std::string(wsfront, wsback));
     }
-
-    // [SỬA LỖI QUAN TRỌNG] Hàm phân tích số liệu hỗ trợ cả dấu phẩy
     std::vector<float> extractValues(std::stringstream& ss, int count) {
         std::vector<float> values;
 
@@ -104,11 +101,6 @@ void TransformMatrix::transformPoint(float x, float y, float& outX, float& outY)
 TransformMatrix TransformMatrix::parse(const std::string& transformString) {
     TransformMatrix result;
     std::string cleanString = transformString;
-
-    // Tách các lệnh transform (translate, rotate, scale...)
-    // SVG cho phép dùng dấu phẩy hoặc khoảng trắng giữa các lệnh, nhưng chuẩn thường là chuỗi liên tiếp
-    // Ta duyệt thủ công để tìm các từ khóa và dấu ngoặc
-
     size_t pos = 0;
     while (pos < cleanString.length()) {
         // Tìm dấu mở ngoặc '('
