@@ -1,4 +1,4 @@
-﻿#include "SVGPath.h"
+#include "SVGPath.h"
 #include <iostream>
 #include <vector>
 #include <cctype>
@@ -6,7 +6,7 @@
 #include <cmath>
 #include "SVGRenderer.h"
 
-// Hàm kiểm tra ký tự có phải là một phần của số không (số, dấu chấm, dấu trừ, e)
+// Hàm kiểm tra ký tự số
 bool isNumChar(char c) {
     return std::isdigit(c) || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E';
 }
@@ -25,54 +25,53 @@ void Path::parsePathData() {
     char currentCmd = 0;
     std::vector<float> argsBuffer;
 
-    // Helper: Bỏ qua khoảng trắng và dấu phẩy
+    // Helper: Bỏ qua phân cách
     auto skipSeparators = [&]() {
         while (i < len && (std::isspace(d_[i]) || d_[i] == ',')) {
             i++;
         }
-    };
+        };
 
-    // Helper: Đọc một số thực từ vị trí hiện tại
+    // Helper: Đọc số
     auto readNumber = [&]() -> float {
         size_t start = i;
         if (i < len && (d_[i] == '-' || d_[i] == '+')) i++;
         while (i < len && (std::isdigit(d_[i]) || d_[i] == '.')) i++;
-        // Xử lý notation khoa học (1.5e-3)
         if (i < len && (d_[i] == 'e' || d_[i] == 'E')) {
             i++;
             if (i < len && (d_[i] == '-' || d_[i] == '+')) i++;
             while (i < len && std::isdigit(d_[i])) i++;
         }
-        std::string numStr = d_.substr(start, i - start);
-        try {
-            return std::stof(numStr);
-        } catch (...) {
-            return 0.0f;
-        }
-    };
+        try { return std::stof(d_.substr(start, i - start)); }
+        catch (...) { return 0.0f; }
+        };
 
-    // Helper: Đẩy lệnh vào danh sách và xử lý Implicit Command
+    // Helper: Đẩy lệnh vào danh sách (ĐÃ BỔ SUNG S, Q, T)
     auto flushCommand = [&]() {
         if (currentCmd == 0) return;
 
         char upperCmd = std::toupper(currentCmd);
         int requiredArgs = 0;
-        if (upperCmd == 'M' || upperCmd == 'L') requiredArgs = 2;
-        else if (upperCmd == 'H' || upperCmd == 'V') requiredArgs = 1;
-        else if (upperCmd == 'C') requiredArgs = 6;
-        else if (upperCmd == 'Z') requiredArgs = 0;
-        else requiredArgs = 0; // Unknown
 
-        // Nếu lệnh Z, không cần tham số
+        // --- CẤU HÌNH SỐ LƯỢNG THAM SỐ CHO TỪNG LỆNH ---
+        if (upperCmd == 'M' || upperCmd == 'L') requiredArgs = 2;      // Move, Line
+        else if (upperCmd == 'H' || upperCmd == 'V') requiredArgs = 1; // Horizontal, Vertical
+        else if (upperCmd == 'C') requiredArgs = 6;                    // Cubic Bezier
+        else if (upperCmd == 'S') requiredArgs = 4;                    // Smooth Cubic (THÊM MỚI)
+        else if (upperCmd == 'Q') requiredArgs = 4;                    // Quadratic Bezier (THÊM MỚI)
+        else if (upperCmd == 'T') requiredArgs = 2;                    // Smooth Quadratic (THÊM MỚI)
+        else if (upperCmd == 'Z') requiredArgs = 0;                    // Close Path
+        else requiredArgs = 0;
+
+        // Lệnh Z không cần tham số
         if (upperCmd == 'Z') {
-            PathCommand cmd;
-            cmd.type = currentCmd;
+            PathCommand cmd; cmd.type = currentCmd;
             commands_.push_back(cmd);
             argsBuffer.clear();
             return;
         }
 
-        // Logic lặp lệnh (Implicit): M 10 10 20 20 -> M 10 10, L 20 20
+        // Xử lý Implicit Commands (Lệnh lặp lại không cần nhắc lại chữ cái)
         size_t processed = 0;
         while (processed + requiredArgs <= argsBuffer.size()) {
             PathCommand cmd;
@@ -83,14 +82,13 @@ void Path::parsePathData() {
             commands_.push_back(cmd);
             processed += requiredArgs;
 
-            // Sau lệnh M đầu tiên, các lệnh tiếp theo hiểu là L
+            // Quy tắc Implicit của SVG:
+            // Sau M (Move) thì các cặp số tiếp theo là L (Line)
             if (currentCmd == 'M') currentCmd = 'L';
             else if (currentCmd == 'm') currentCmd = 'l';
         }
-        
-        // Giữ lại phần dư (nếu có lỗi) hoặc clear
         argsBuffer.clear();
-    };
+        };
 
     while (i < len) {
         skipSeparators();
@@ -99,38 +97,35 @@ void Path::parsePathData() {
         char c = d_[i];
 
         if (std::isalpha(c)) {
-            // Gặp lệnh mới -> Xử lý lệnh cũ trước (nếu còn dư số)
-            // (Thường thì argsBuffer đã được clear sau mỗi vòng số, nhưng để chắc chắn)
-            argsBuffer.clear(); 
-            
+            // Gặp lệnh mới -> Đẩy dữ liệu lệnh cũ vào vector
+            // Vì argsBuffer được clear ngay trong flushCommand nên ở đây thường là buffer rỗng
+            // Nhưng nếu có lỗi cú pháp trước đó thì clear đi cho an toàn
+            argsBuffer.clear();
+
             currentCmd = c;
-            i++; // Tiêu thụ ký tự lệnh
-            
-            // Nếu là Z, flush ngay lập tức
-            if (std::toupper(currentCmd) == 'Z') {
-                flushCommand();
-            }
-        } 
+            i++;
+
+            if (std::toupper(currentCmd) == 'Z') flushCommand();
+        }
         else if (isNumChar(c)) {
-            // Gặp số -> Đọc số
-            if (currentCmd == 0) { i++; continue; } // Chưa có lệnh nào mà có số -> Lỗi, bỏ qua
+            if (currentCmd == 0) { i++; continue; }
+
             float val = readNumber();
             argsBuffer.push_back(val);
 
-            // Kiểm tra xem đã đủ số cho lệnh hiện tại chưa?
+            // Kiểm tra xem đã đủ số chưa để đẩy luôn
             char upperCmd = std::toupper(currentCmd);
             int needed = 0;
-            if (upperCmd == 'M' || upperCmd == 'L') needed = 2;
+            if (upperCmd == 'M' || upperCmd == 'L' || upperCmd == 'T') needed = 2; // Thêm T
             else if (upperCmd == 'H' || upperCmd == 'V') needed = 1;
+            else if (upperCmd == 'S' || upperCmd == 'Q') needed = 4;               // Thêm S, Q
             else if (upperCmd == 'C') needed = 6;
-            
+
             if (argsBuffer.size() == needed) {
                 flushCommand();
             }
-        } 
-        else {
-            i++; // Ký tự rác
         }
+        else { i++; }
     }
 }
 
