@@ -158,6 +158,7 @@ class Text : public SVGElement
 {
 private:
     double x_ = 0.0, y_ = 0.0;
+    double dx_ = 0.0, dy_ = 0.0;
     double fontSize_ = 12.0;
     std::string content_; // Lưu nội dung chữ ("Hello World")
 
@@ -169,6 +170,8 @@ public:
 
     double getX() const { return x_; }
     double getY() const { return y_; }
+    double getDx() const { return dx_; } // [THÊM] Getter
+    double getDy() const { return dy_; } // [THÊM] Getter
     double getFontSize() const { return fontSize_; }
     const std::string &getContent() const { return content_; }
 };

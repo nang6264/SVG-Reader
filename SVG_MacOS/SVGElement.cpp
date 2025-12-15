@@ -182,7 +182,12 @@ Text::Text(const Attributes &attributes, const std::string &content)
     it = attributes.find("y");
     if (it != attributes.end())
         y_ = safeStod(it->second);
+    // [THÊM MỚI] Đọc dx, dy
+    it = attributes.find("dx");
+    if (it != attributes.end()) dx_ = safeStod(it->second);
 
+    it = attributes.find("dy");
+    if (it != attributes.end()) dy_ = safeStod(it->second);
     // Đọc font-size (nếu có)
     it = attributes.find("font-size");
     if (it != attributes.end())

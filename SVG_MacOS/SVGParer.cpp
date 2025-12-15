@@ -56,84 +56,62 @@ static inline std::string trim(const std::string &s)
 // --- Triển khai Hàm tiện ích ---
 
 // HÀM TIỆN ÍCH: Trích xuất tên tag và map thuộc tính từ một chuỗi
-bool SVGParser::extractTagAndAttributes(const std::string &line, std::string &tagName, Attributes &attributes) const
+// [SVGParser.cpp] Thay thế hàm extractTagAndAttributes
+
+bool SVGParser::extractTagAndAttributes(const std::string& line, std::string& tagName, Attributes& attributes) const
 {
-    // std::cout << line << "\n";
     std::string trimmedLine = trim(line);
-    // std::cout << trimmedLine << "\n";
     attributes.clear();
 
     if (trimmedLine.length() < 3 || trimmedLine.front() != '<' || trimmedLine.back() != '>')
-    {
-        return false; // Không phải tag hợp lệ
-    }
+        return false;
 
     // Bỏ '<' ở đầu và '/>' hoặc '>' ở cuối
     std::string content = trimmedLine.substr(1, trimmedLine.length() - 2);
-    if (content.back() == '/')
-    {
-        content.pop_back(); // Bỏ '/' cho self-closing tag
-    }
+    if (content.back() == '/') content.pop_back();
     content = trim(content);
-
-    if (content.empty())
-        return false;
+    if (content.empty()) return false;
 
     std::stringstream ss(content);
-    std::string token;
 
     // 1. Lấy tên Tag
     ss >> tagName;
-
-    if (tagName.empty())
-        return false;
+    if (tagName.empty()) return false;
 
     while (ss.good())
     {
         std::string attrName;
+        ss >> std::ws; // Bỏ qua khoảng trắng
+        if (ss.eof()) break;
 
-        // Bỏ qua khoảng trắng trước tên thuộc tính
-        ss >> std::ws;
-
-        // Nếu hết dòng thì dừng
-        if (ss.eof())
-            break;
-
-        // Đọc tên thuộc tính cho đến khi gặp dấu '='
-        if (!std::getline(ss, attrName, '='))
-            break;
-
-        attrName = trim(attrName); // Xóa khoảng trắng thừa nếu có
-        if (attrName.empty())
-            continue;
+        // Đọc tên thuộc tính đến dấu '='
+        if (!std::getline(ss, attrName, '=')) break;
+        attrName = trim(attrName);
+        if (attrName.empty()) continue;
 
         std::string value;
-        // Kiểm tra ký tự tiếp theo để xem có phải là dấu ngoặc kép không
-        // ss >> std::ws đã được xử lý ngầm bởi getline ở vòng sau hoặc ta peek ngay
-
         char nextChar = ss.peek();
-        // Bỏ qua khoảng trắng (nếu có) giữa dấu = và giá trị
-        while (ss.good() && std::isspace(ss.peek()))
-        {
+
+        // Bỏ qua khoảng trắng sau dấu =
+        while (ss.good() && std::isspace(nextChar)) {
             ss.ignore();
+            nextChar = ss.peek();
         }
 
-        if (ss.peek() == '"')
+        // [SỬA LỖI QUAN TRỌNG] Hỗ trợ cả nháy kép (") và nháy đơn (')
+        if (nextChar == '"' || nextChar == '\'')
         {
-            // TRƯỜNG HỢP 1: Giá trị nằm trong ngoặc kép (points="10 20 30")
-            ss.ignore();                  // Bỏ qua dấu " mở đầu
-            std::getline(ss, value, '"'); // Đọc cho đến khi gặp dấu " đóng
+            char quoteType = nextChar; // Lưu loại dấu nháy đang dùng
+            ss.ignore(); // Bỏ qua dấu nháy mở
+            std::getline(ss, value, quoteType); // Đọc đến khi gặp dấu nháy đóng tương ứng
         }
         else
         {
-            // TRƯỜNG HỢP 2: Giá trị không có ngoặc (width=100)
+            // Trường hợp không có ngoặc (vd: width=100)
             ss >> value;
         }
 
-        // Lưu vào map
         attributes[attrName] = value;
-
-        // std::cout << "Debug: " << attrName << "\t" << value << "\n";
     }
 
     return true;

@@ -1,4 +1,5 @@
-﻿#include "Transform.h"
+﻿// Transform.cpp - PHIÊN BẢN ĐÃ SỬA LỖI PARSING
+#include "Transform.h"
 #include <sstream>
 #include <iostream>
 #include <algorithm>
@@ -15,24 +16,24 @@ namespace {
         return (wsback <= wsfront ? std::string() : std::string(wsfront, wsback));
     }
 
-    // Hàm tiện ích phân tích cú pháp (dùng trong parse)
+    // [SỬA LỖI QUAN TRỌNG] Hàm phân tích số liệu hỗ trợ cả dấu phẩy
     std::vector<float> extractValues(std::stringstream& ss, int count) {
         std::vector<float> values;
-        std::string token;
+
+        // Đọc phần còn lại của stream vào chuỗi
+        std::string remaining;
+        std::getline(ss, remaining);
+
+        // Thay thế toàn bộ dấu phẩy bằng dấu cách để dễ đọc
+        std::replace(remaining.begin(), remaining.end(), ',', ' ');
+
+        // Đưa lại vào stringstream mới
+        std::stringstream cleanSS(remaining);
+        float val;
+
         for (int i = 0; i < count; ++i) {
-            // Bỏ qua khoảng trắng và dấu phẩy
-            while (ss.peek() == ' ' || ss.peek() == ',' || ss.peek() == '\t') {
-                ss.ignore();
-            }
-            if (ss >> token) {
-                try {
-                    // Chuyển đổi và lưu giá trị
-                    values.push_back(std::stof(token));
-                }
-                catch (...) {
-                    // Bỏ qua giá trị không hợp lệ
-                    break;
-                }
+            if (cleanSS >> val) {
+                values.push_back(val);
             }
             else {
                 break;
@@ -46,29 +47,22 @@ namespace {
 // --- Triển khai Lớp TransformMatrix ---
 
 TransformMatrix::TransformMatrix() {
-    m[0] = 1.0f; m[1] = 0.0f; m[2] = 0.0f; // Hàng 1 (m11, m12, tx)
-    m[3] = 0.0f; m[4] = 1.0f; m[5] = 0.0f; // Hàng 2 (m21, m22, ty)
+    m[0] = 1.0f; m[1] = 0.0f; m[2] = 0.0f; // Hàng 1
+    m[3] = 0.0f; m[4] = 1.0f; m[5] = 0.0f; // Hàng 2
 }
 
 void TransformMatrix::combine(const TransformMatrix& other) {
     float a = m[0], b = m[1], c = m[2];
-    float d = m[3], e = m[4], f = m[5]; 
+    float d = m[3], e = m[4], f = m[5];
 
-    // Ma trận hiện tại (Parent) nhân Ma trận mới (Child/Other)
-    // Công thức chuẩn:
-    // [ a  d  c ]   [ oa od oc ]   [ a*oa+d*ob  a*od+d*oe  a*oc+d*of+c ]
-    // [ b  e  f ] x [ ob oe of ] = [ b*oa+e*ob  b*od+e*oe  b*oc+e*of+f ]
-    // [ 0  0  1 ]   [ 0  0  1  ]   [ 0          0          1           ]
-
-    // Hàng 1 (X)
+    // Nhân ma trận: this = this * other
     m[0] = a * other.m[0] + d * other.m[1];
-    m[3] = a * other.m[3] + d * other.m[4]; // Lưu ý: m[3] là m01 (theo cách dùng trong transformPoint)
-    m[2] = a * other.m[2] + d * other.m[5] + c; // <-- ĐÃ SỬA: Tx bị ảnh hưởng bởi a, d
+    m[3] = a * other.m[3] + d * other.m[4];
+    m[2] = a * other.m[2] + d * other.m[5] + c;
 
-    // Hàng 2 (Y)
     m[1] = b * other.m[0] + e * other.m[1];
     m[4] = b * other.m[3] + e * other.m[4];
-    m[5] = b * other.m[2] + e * other.m[5] + f; // <-- ĐÃ SỬA: Ty bị ảnh hưởng bởi b, e
+    m[5] = b * other.m[2] + e * other.m[5] + f;
 }
 
 TransformMatrix TransformMatrix::translate(float x, float y) {
@@ -85,8 +79,8 @@ TransformMatrix TransformMatrix::rotate(float degrees) {
 
     TransformMatrix mat;
     mat.m[0] = cosA;
+    mat.m[3] = -sinA;
     mat.m[1] = sinA;
-    mat.m[3] = -sinA; // sin(-A) = -sin(A)
     mat.m[4] = cosA;
     return mat;
 }
@@ -108,40 +102,85 @@ void TransformMatrix::transformPoint(float x, float y, float& outX, float& outY)
 }
 
 TransformMatrix TransformMatrix::parse(const std::string& transformString) {
-    TransformMatrix result; // Khởi tạo là ma trận đơn vị
-    std::stringstream ss(transformString);
-    std::string segment;
+    TransformMatrix result;
+    std::string cleanString = transformString;
 
-    // Tách chuỗi theo dấu ngoặc đóng ')', sau đó tìm hàm
-    while (std::getline(ss, segment, ')')) {
-        size_t openParen = segment.find_last_of('(');
-        if (openParen == std::string::npos) continue;
+    // Tách các lệnh transform (translate, rotate, scale...)
+    // SVG cho phép dùng dấu phẩy hoặc khoảng trắng giữa các lệnh, nhưng chuẩn thường là chuỗi liên tiếp
+    // Ta duyệt thủ công để tìm các từ khóa và dấu ngoặc
 
-        // Tên lệnh (ví dụ: "translate")
-        std::string command = trim(segment.substr(0, openParen));
-        // Giá trị bên trong ngoặc (ví dụ: "10,20")
-        std::string valuesStr = segment.substr(openParen + 1);
+    size_t pos = 0;
+    while (pos < cleanString.length()) {
+        // Tìm dấu mở ngoặc '('
+        size_t openParen = cleanString.find('(', pos);
+        if (openParen == std::string::npos) break;
 
-        std::stringstream valueSS(valuesStr);
+        // Tìm dấu đóng ngoặc ')'
+        size_t closeParen = cleanString.find(')', openParen);
+        if (closeParen == std::string::npos) break;
+
+        // Tên lệnh nằm trước dấu mở ngoặc (ví dụ: "translate")
+        std::string command = cleanString.substr(pos, openParen - pos);
+        // Xóa khoảng trắng quanh command
+        command = trim(command);
+        // Xóa dấu phẩy nếu lệnh trước đó kết thúc bằng dấu phẩy
+        if (!command.empty() && command[0] == ',') command.erase(0, 1);
+        command = trim(command);
+
+        // Nội dung bên trong ngoặc (ví dụ: "640,360")
+        std::string content = cleanString.substr(openParen + 1, closeParen - openParen - 1);
+        std::stringstream ss(content);
+
         TransformMatrix currentTransform;
 
         if (command == "translate") {
-            auto vals = extractValues(valueSS, 2);
+            auto vals = extractValues(ss, 2);
             if (vals.size() == 1) currentTransform = translate(vals[0], 0.0f);
             if (vals.size() == 2) currentTransform = translate(vals[0], vals[1]);
         }
         else if (command == "rotate") {
-            auto vals = extractValues(valueSS, 1);
-            if (vals.size() >= 1) currentTransform = rotate(vals[0]);
+            auto vals = extractValues(ss, 3); // rotate(a) hoặc rotate(a, cx, cy)
+            if (vals.size() == 1) {
+                currentTransform = rotate(vals[0]);
+            }
+            else if (vals.size() == 3) {
+                // rotate(angle, cx, cy) = translate(cx, cy) * rotate(angle) * translate(-cx, -cy)
+                TransformMatrix t1 = translate(vals[1], vals[2]);
+                TransformMatrix r = rotate(vals[0]);
+                TransformMatrix t2 = translate(-vals[1], -vals[2]);
+
+                // Thứ tự combine: t1 * r * t2
+                // Do combine là nhân bên phải: result = result * new.
+                // Nên ta cần combine t2 vào t1, rồi r vào t1?
+                // Logic combine: this = this * other.
+                // Muốn t1 * r * t2 -> t1.combine(r); t1.combine(t2);
+                t1.combine(r);
+                t1.combine(t2);
+                currentTransform = t1;
+            }
         }
         else if (command == "scale") {
-            auto vals = extractValues(valueSS, 2);
+            auto vals = extractValues(ss, 2);
             if (vals.size() == 1) currentTransform = scale(vals[0]);
             if (vals.size() == 2) currentTransform = scale(vals[0], vals[1]);
         }
+        else if (command == "matrix") {
+            auto vals = extractValues(ss, 6);
+            if (vals.size() == 6) {
+                // SVG matrix(a, b, c, d, e, f)
+                // Map to: m0=a, m1=b, m2=e, m3=c, m4=d, m5=f
+                currentTransform.m[0] = vals[0];
+                currentTransform.m[1] = vals[1];
+                currentTransform.m[3] = vals[2];
+                currentTransform.m[4] = vals[3];
+                currentTransform.m[2] = vals[4];
+                currentTransform.m[5] = vals[5];
+            }
+        }
 
-        // Tích lũy ma trận (result = result * currentTransform)
         result.combine(currentTransform);
+        pos = closeParen + 1;
     }
+
     return result;
 }
