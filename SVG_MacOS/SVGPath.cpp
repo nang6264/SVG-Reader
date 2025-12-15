@@ -1,4 +1,4 @@
-﻿#include "SVGPath.h"
+#include "SVGPath.h"
 #include <iostream>
 #include <vector>
 #include <cctype>
@@ -49,7 +49,6 @@ void Path::parsePathData() {
     // Helper: Đẩy lệnh vào danh sách (ĐÃ BỔ SUNG S, Q, T)
     auto flushCommand = [&]() {
         if (currentCmd == 0) return;
-
         char upperCmd = std::toupper(currentCmd);
         int requiredArgs = 0;
 
@@ -76,9 +75,7 @@ void Path::parsePathData() {
         while (processed + requiredArgs <= argsBuffer.size()) {
             PathCommand cmd;
             cmd.type = currentCmd;
-            for (int k = 0; k < requiredArgs; ++k) {
-                cmd.args.push_back(argsBuffer[processed + k]);
-            }
+            for (int k = 0; k < requiredArgs; ++k) cmd.args.push_back(argsBuffer[processed + k]);
             commands_.push_back(cmd);
             processed += requiredArgs;
 
@@ -93,7 +90,6 @@ void Path::parsePathData() {
     while (i < len) {
         skipSeparators();
         if (i >= len) break;
-
         char c = d_[i];
 
         if (std::isalpha(c)) {

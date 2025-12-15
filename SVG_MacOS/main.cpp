@@ -8,8 +8,6 @@
 
 int main()
 {
-    // runUnitTests();
-
     std::string filename;
     std::cout << "input file svg  (vd: input.svg): ";
     std::cin >> filename;
@@ -67,5 +65,3 @@ int main()
 
     return 0;
 }
-
-// g++ *.cpp -o app -std=c++17 -I/opt/homebrew/include -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system && ./app
