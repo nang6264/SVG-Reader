@@ -14,15 +14,14 @@
         "-lsfml-graphics",
         "-lsfml-window",
         "-lsfml-system",
-        
         // Các tệp .cpp của bạn (thêm tất cả vào đây)
         "main.cpp",
         "SVGElement.cpp",
-        // "Transform.cpp",
         "SVGParer.cpp", // Tên tệp của bạn, hãy chắc chắn là đúng
         "SVGRenderer.cpp",
-        // "FileSVGRenderer.cpp",
-
+        "Group.cpp",
+        "Transform.cpp",
+        "SVGPath.cpp",
         // Tệp đầu ra
         "-o",
         "build/my_svg_app" // Tên chương trình sẽ chạy
@@ -31,7 +30,9 @@
         "kind": "build",
         "isDefault": true
       },
-      "problemMatcher": ["$gcc"]
+      "problemMatcher": [
+        "$gcc"
+      ]
     }
   ]
 }

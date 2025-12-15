@@ -1,3 +1,5 @@
+// SVGRenderer.cpp - FINAL SHARP VERSION
+// Tính năng: Viền sắc nét (Miter Joins) + Tô màu thông minh + Fix lỗi trùng lặp
 
 #include "SVGRenderer.h"
 #include "SVGElement.h"
@@ -26,12 +28,12 @@ float getLength(const sf::Vector2f& v) { return std::sqrt(v.x * v.x + v.y * v.y)
 
 sf::Vector2f normalize(const sf::Vector2f& v) {
     float len = getLength(v);
-    if (len < 0.00001f) return { 0, 0 };
+    if (len < 0.0001f) return { 0, 0 };
     return v / len;
 }
 
-// Vector pháp tuyến 90 độ (Perpendicular)
-sf::Vector2f getPerpendicular(const sf::Vector2f& v) {
+// Vector pháp tuyến (vuông góc 90 độ)
+sf::Vector2f getNormal(const sf::Vector2f& v) {
     return { -v.y, v.x };
 }
 
@@ -86,10 +88,12 @@ void drawConcaveShape(sf::RenderWindow& window, const std::vector<std::vector<sf
         std::vector<Point> ring;
         for (const auto& p : shape) ring.push_back({ (double)p.x, (double)p.y });
 
+        // Clean up
         if (ring.size() >= 3) {
             auto& f = ring.front(); auto& l = ring.back();
             if (std::abs(f[0] - l[0]) < 0.001 && std::abs(f[1] - l[1]) < 0.001) ring.pop_back();
         }
+
         if (ring.size() >= 3) {
             polygon.push_back(ring);
             for (const auto& p : ring) flatPoints.emplace_back((float)p[0], (float)p[1]);
@@ -101,86 +105,103 @@ void drawConcaveShape(sf::RenderWindow& window, const std::vector<std::vector<sf
 
     sf::VertexArray vertices(sf::PrimitiveType::Triangles);
     for (uint32_t index : indices) {
-        if (index < flatPoints.size()) vertices.append(sf::Vertex(flatPoints[index], color));
+        if (index < flatPoints.size()) {
+            vertices.append(sf::Vertex(flatPoints[index], color));
+        }
     }
     window.draw(vertices);
 }
 
 // =============================================================
-// 3. LOGIC VẼ VIỀN CAO CẤP (MITER JOIN EXTRUSION)
+// 3. LOGIC VẼ VIỀN SẮC NÉT (SHARP STROKE - MITER JOINT)
 // =============================================================
 
-// Hàm này tạo ra một lưới tam giác (Triangle Strip) bao quanh đường path
-// Để tạo ra nét vẽ có độ dày và góc nhọn chính xác.
-void drawStrokeMesh(sf::RenderWindow& window, const std::vector<sf::Vector2f>& points, float thickness, sf::Color color, bool isClosed) {
-    if (points.size() < 2) return;
+// Vẽ tam giác đơn giản
+void drawTri(sf::RenderWindow& w, sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3, sf::Color c) {
+    sf::VertexArray tri(sf::PrimitiveType::Triangles, 3);
+    tri[0] = { p1, c }; tri[1] = { p2, c }; tri[2] = { p3, c };
+    w.draw(tri);
+}
 
-    std::vector<sf::Vector2f> path = points;
+// Vẽ thân đoạn thẳng (dùng 2 tam giác ghép lại để chính xác hơn RectangleShape)
+void drawSegment(sf::RenderWindow& w, sf::Vector2f p1, sf::Vector2f p2, float thickness, sf::Color color) {
+    sf::Vector2f dir = normalize(p2 - p1);
+    sf::Vector2f normal = getNormal(dir) * (thickness / 2.f);
 
-    // Nếu đóng kín, thêm điểm đầu vào cuối và điểm cuối lên đầu (để tính góc)
-    if (isClosed) {
-        path.push_back(points[0]);
-        path.push_back(points[1]); // Đệm thêm để tính góc kề
-        path.insert(path.begin(), points.back());
+    sf::VertexArray quad(sf::PrimitiveType::Triangles, 6);
+    // Tam giác 1
+    quad[0] = { p1 + normal, color };
+    quad[1] = { p1 - normal, color };
+    quad[2] = { p2 - normal, color };
+    // Tam giác 2
+    quad[3] = { p1 + normal, color };
+    quad[4] = { p2 - normal, color };
+    quad[5] = { p2 + normal, color };
+    w.draw(quad);
+}
+
+// Hàm quan trọng nhất: Tính toán và vẽ góc nhọn (Miter Join)
+void drawLineJoin(sf::RenderWindow& w, sf::Vector2f p0, sf::Vector2f p1, sf::Vector2f p2,
+    float thickness, sf::Color color, std::string type, float miterLimit) {
+
+    sf::Vector2f dir1 = normalize(p1 - p0);
+    sf::Vector2f dir2 = normalize(p2 - p1);
+    sf::Vector2f n1 = getNormal(dir1); // Pháp tuyến đoạn trước
+    sf::Vector2f n2 = getNormal(dir2); // Pháp tuyến đoạn sau
+
+    // Tính vector tiếp tuyến trung bình tại góc
+    sf::Vector2f tangent = normalize(dir1 + dir2);
+    // Hướng của đỉnh nhọn Miter
+    sf::Vector2f miterDir = { -tangent.y, tangent.x };
+
+    // Xác định hướng rẽ (trái hay phải)
+    float cp = crossProduct(dir1, dir2);
+    float halfWidth = thickness / 2.f;
+
+    sf::Vector2f outer1, outer2; // Hai điểm ngoài cùng của 2 đoạn thẳng
+
+    if (cp < 0) { // Rẽ phải
+        outer1 = p1 - n1 * halfWidth;
+        outer2 = p1 - n2 * halfWidth;
+        miterDir = -miterDir; // Đảo chiều miter
     }
-    else {
-        // Nếu hở, thêm điểm giả bằng cách kéo dài tiếp tuyến
-        sf::Vector2f startDir = normalize(points[1] - points[0]);
-        path.insert(path.begin(), points[0] - startDir);
-        sf::Vector2f endDir = normalize(points.back() - points[points.size() - 2]);
-        path.push_back(points.back() + endDir);
+    else { // Rẽ trái
+        outer1 = p1 + n1 * halfWidth;
+        outer2 = p1 + n2 * halfWidth;
     }
 
-    float halfWidth = thickness / 2.0f;
-    float miterLimit = 10.0f; // Giới hạn độ nhọn để tránh tia gai vô tận
+    // Tính độ dài từ tâm góc đến đỉnh nhọn
+    float dot = dotProduct(miterDir, (cp < 0 ? -n1 : n1));
+    if (std::abs(dot) < 0.01f) return; // Song song, bỏ qua
+    float miterLength = halfWidth / dot;
 
-    sf::VertexArray vertices(sf::PrimitiveType::TriangleStrip);
+    // --- XỬ LÝ LOẠI KHỚP NỐI ---
 
-    // Duyệt qua các điểm chính (bỏ qua điểm đệm đầu và cuối)
-    for (size_t i = 1; i < path.size() - 1; ++i) {
-        sf::Vector2f curr = path[i];
-        sf::Vector2f prev = path[i - 1];
-        sf::Vector2f next = path[i + 1];
+    // 1. ROUND (Tròn)
+    if (type == "round") {
+        sf::CircleShape circle(halfWidth);
+        circle.setOrigin({ halfWidth, halfWidth });
+        circle.setPosition(p1);
+        circle.setFillColor(color);
+        w.draw(circle);
+        return;
+    }
 
-        sf::Vector2f dir1 = normalize(curr - prev);
-        sf::Vector2f dir2 = normalize(next - curr);
-
-        // Vector tiếp tuyến tại góc (Average tangent)
-        sf::Vector2f tangent = normalize(dir1 + dir2);
-
-        // Vector pháp tuyến miter (hướng ra ngoài góc nhọn)
-        sf::Vector2f miter = { -tangent.y, tangent.x };
-
-        // Vector pháp tuyến của cạnh đang xét
-        sf::Vector2f normal1 = { -dir1.y, dir1.x };
-
-        // Tính độ dài miter cần thiết để đạt đến đỉnh nhọn
-        float dot = dotProduct(miter, normal1);
-
-        // Tránh lỗi chia cho 0 hoặc song song
-        if (std::abs(dot) < 0.001f) dot = 1.0f;
-
-        float miterLength = halfWidth / dot;
-
-        // Nếu góc quá gắt (miter quá dài), cắt bớt (Bevel) hoặc giới hạn
-        if (std::abs(miterLength) > miterLimit * halfWidth) {
-            miterLength = miterLimit * halfWidth;
+    // 2. MITER (Nhọn) - Có kiểm tra giới hạn
+    if (type == "miter") {
+        // Kiểm tra Miter Limit (tránh gai quá dài)
+        if ((miterLength / halfWidth) <= miterLimit) {
+            sf::Vector2f miterPoint = p1 + miterDir * miterLength;
+            // Vẽ 2 tam giác để lấp đầy khoảng trống tạo thành mũi nhọn
+            drawTri(w, p1, outer1, miterPoint, color);
+            drawTri(w, p1, miterPoint, outer2, color);
+            return;
         }
-
-        // Tính 2 điểm: Ngoài (Outer) và Trong (Inner) của đường viền tại đỉnh này
-        sf::Vector2f pOuter = curr + miter * miterLength;
-        sf::Vector2f pInner = curr - miter * miterLength;
-
-        vertices.append(sf::Vertex(pOuter, color));
-        vertices.append(sf::Vertex(pInner, color));
+        // Nếu quá nhọn -> Tự động chuyển sang Bevel
     }
 
-    // Nếu không đóng kín, cần xử lý điểm đầu và điểm cuối cho đẹp (cắt vuông)
-    // Ở đây thuật toán TriangleStrip tự nối, nên với path hở ta chỉ cần render
-    // đoạn giữa (đã loại bỏ điểm đệm).
-    // Tuy nhiên, logic trên đã bao gồm điểm đầu/cuối thật sự.
-
-    window.draw(vertices);
+    // 3. BEVEL (Vát/Tù)
+    drawTri(w, p1, outer1, outer2, color);
 }
 
 // =============================================================
@@ -189,7 +210,7 @@ void drawStrokeMesh(sf::RenderWindow& window, const std::vector<sf::Vector2f>& p
 
 SVGRenderer::SVGRenderer(unsigned int width, unsigned int height) {
     sf::ContextSettings settings; settings.antiAliasingLevel = 8;
-    window.create(sf::VideoMode({ 1200, 800 }), "SVG Renderer", sf::Style::Default, sf::State::Windowed, settings);
+    window.create(sf::VideoMode({ width + 400, height + 200 }), "SVG Renderer", sf::Style::Default, sf::State::Windowed, settings);
     view = window.getDefaultView();
     if (!font.openFromFile("times.ttf")) {}
 }
@@ -233,68 +254,21 @@ void SVGRenderer::render() {
     }
 }
 
-// Helpers
-float getOpacity(const std::map<std::string, std::string>& attrs, std::string key) {
-    auto it = attrs.find(key);
-    if (it != attrs.end()) try { return std::stof(it->second); }
-    catch (...) {}
-    return 1.0f;
-}
-
-sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type) {
-    std::string s = colorStr;
-    s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
-    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-    if (s == "none" || s == "transparent") return sf::Color::Transparent;
-
-    static const std::map<std::string, sf::Color> colors = {
-        {"black", sf::Color::Black}, {"white", sf::Color::White},
-        {"red", sf::Color::Red}, {"green", sf::Color::Green},
-        {"blue", sf::Color::Blue}, {"yellow", sf::Color::Yellow},
-        {"magenta", sf::Color::Magenta}, {"cyan", sf::Color::Cyan},
-        {"gray", sf::Color(128, 128, 128)}, {"grey", sf::Color(128, 128, 128)},
-        {"orange", sf::Color(255, 165, 0)}, {"purple", sf::Color(128, 0, 128)},
-        {"lime", sf::Color(0, 255, 0)}, {"navy", sf::Color(0, 0, 128)},
-        {"pink", sf::Color(255, 192, 203)}, {"gold", sf::Color(255, 215, 0)}
-    };
-    if (colors.count(s)) return colors.at(s);
-
-    if (!s.empty() && s[0] == '#') {
-        s.erase(0, 1);
-        if (s.size() == 3) { std::string t; for (char c : s) { t += c; t += c; } s = t; }
-        if (s.size() >= 6) {
-            unsigned int hex; std::stringstream ss; ss << std::hex << s; ss >> hex;
-            if (s.size() == 8) return sf::Color((hex >> 24) & 0xFF, (hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF);
-            return sf::Color((hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF);
-        }
-    }
-    if (s.find("rgb(") == 0) {
-        size_t end = s.find(')');
-        if (end != std::string::npos) {
-            std::string c = s.substr(4, end - 4);
-            std::replace(c.begin(), c.end(), ',', ' ');
-            std::stringstream ss(c); int r, g, b; ss >> r >> g >> b;
-            return sf::Color(r, g, b);
-        }
-    }
-    return sf::Color::Transparent;
-}
-
+// Helpers Attribute
+float getOpacity(const std::map<std::string, std::string>& attrs, std::string key);
+sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type);
 Attributes SVGRenderer::getEffectiveAttributes(const Attributes& localAttrs) const {
     Attributes e; if (!renderStack_.empty())e = renderStack_.back().inheritedAttributes; for (auto& k : localAttrs)e[k.first] = k.second;
     if (e.count("style")) { std::stringstream ss(e["style"]); std::string s; while (std::getline(ss, s, ';')) { size_t p = s.find(':'); if (p != std::string::npos) { std::string k = s.substr(0, p), v = s.substr(p + 1); k.erase(0, k.find_first_not_of(" \t")); k.erase(k.find_last_not_of(" \t") + 1); v.erase(0, v.find_first_not_of(" \t")); v.erase(v.find_last_not_of(" \t") + 1); if (!k.empty())e[k] = v; } } }
     return e;
 }
 
-// Basic Renderers (Giữ nguyên logic cũ, tập trung sửa renderPath)
+// Basic Renderers 
 void SVGRenderer::renderCircle(const Circle& c) {
-    // Vẽ Circle bằng Path Logic để đồng bộ stroke nhọn nếu cần, hoặc giữ nguyên CircleShape nếu muốn nhanh
-    // Ở đây giữ nguyên CircleShape vì hình tròn không có góc nhọn để mà lỗi
     sf::CircleShape s(c.getR());
     Attributes attrs = getEffectiveAttributes(c.getAttributes());
     TransformMatrix tm = getCumulativeTransform(); tm.combine(c.getTransform());
     float tx, ty; tm.transformPoint(c.getCx() - c.getR(), c.getCy() - c.getR(), tx, ty); s.setPosition({ tx, ty });
-
     sf::Color fill = stringToColor(attrs.count("fill") ? attrs["fill"] : "none", "fill");
     if (fill != sf::Color::Transparent) { fill.a = getOpacity(attrs, "fill-opacity") * 255; s.setFillColor(fill); }
     else s.setFillColor(sf::Color::Transparent);
@@ -305,30 +279,16 @@ void SVGRenderer::renderCircle(const Circle& c) {
     s.setOutlineThickness(stroke.a > 0 ? w : 0); window.draw(s);
 }
 void SVGRenderer::renderRect(const Rect& r) {
-    // Chuyển Rect thành Path để vẽ góc nhọn (Miter) chuẩn xác
-    // Nếu dùng RectangleShape, góc sẽ bị bo tròn hoặc hở khi stroke dày.
-    // Ta giả lập Rect bằng polygon
-    std::vector<sf::Vector2f> pts;
-    float x = r.getX(), y = r.getY(), w = r.getWidth(), h = r.getHeight();
-    pts.push_back({ x, y }); pts.push_back({ x + w, y }); pts.push_back({ x + w, y + h }); pts.push_back({ x, y + h });
-
-    // Gọi logic vẽ Polygon (đã được nâng cấp bên dưới)
-    // Cần tạo Polygon giả
-    Attributes attrs = getEffectiveAttributes(r.getAttributes());
-    TransformMatrix tm = getCumulativeTransform(); tm.combine(r.getTransform());
-
-    // Transform điểm
-    for (auto& p : pts) { float tx, ty; tm.transformPoint(p.x, p.y, tx, ty); p.x = tx; p.y = ty; }
-
+    sf::RectangleShape s({ (float)r.getWidth(),(float)r.getHeight() }); s.setPosition({ (float)r.getX(),(float)r.getY() });
+    Attributes attrs = getEffectiveAttributes(r.getAttributes()); TransformMatrix tm = getCumulativeTransform(); tm.combine(r.getTransform());
     sf::Color fill = stringToColor(attrs.count("fill") ? attrs["fill"] : "none", "fill");
-    if (fill != sf::Color::Transparent) { fill.a = getOpacity(attrs, "fill-opacity") * 255; drawConcaveShape(window, { pts }, fill); }
-
+    if (fill != sf::Color::Transparent) { fill.a = getOpacity(attrs, "fill-opacity") * 255; s.setFillColor(fill); }
+    else s.setFillColor(sf::Color::Transparent);
     sf::Color stroke = stringToColor(attrs.count("stroke") ? attrs["stroke"] : "none", "stroke");
-    if (stroke != sf::Color::Transparent) { stroke.a = getOpacity(attrs, "stroke-opacity") * 255; }
-    float th = 1.f; if (attrs.count("stroke-width")) try { th = std::stof(attrs["stroke-width"]); }
+    if (stroke != sf::Color::Transparent) { stroke.a = getOpacity(attrs, "stroke-opacity") * 255; s.setOutlineColor(stroke); }
+    float w = 1.f; if (attrs.count("stroke-width")) try { w = std::stof(attrs["stroke-width"]); }
     catch (...) {};
-
-    if (stroke.a > 0 && th > 0) drawStrokeMesh(window, pts, th, stroke, true); // True = Closed
+    s.setOutlineThickness(stroke.a > 0 ? w : 0); window.draw(s, getSFMLTransform(tm));
 }
 void SVGRenderer::renderText(const Text& t) {
     sf::Text s(font); s.setString(t.getContent()); s.setCharacterSize((unsigned)t.getFontSize()); s.setPosition({ (float)t.getX(), (float)t.getY() - s.getCharacterSize() });
@@ -347,11 +307,7 @@ void SVGRenderer::renderLine(const Line& l) {
     sf::Color stroke = stringToColor(attrs.count("stroke") ? attrs["stroke"] : "none", "stroke"); stroke.a = getOpacity(attrs, "stroke-opacity") * 255;
     float w = 1.f; if (attrs.count("stroke-width")) try { w = std::stof(attrs["stroke-width"]); }
     catch (...) {};
-
-    if (stroke.a > 0 && w > 0) {
-        std::vector<sf::Vector2f> pts = { {x1,y1}, {x2,y2} };
-        drawStrokeMesh(window, pts, w, stroke, false);
-    }
+    if (stroke.a > 0 && w > 0) drawSegment(window, { x1,y1 }, { x2,y2 }, w, stroke);
 }
 void SVGRenderer::renderPolyline(const Polyline& p) {
     std::istringstream iss(p.getPoints()); std::vector<sf::Vector2f> pts; float x, y; char c; TransformMatrix tm = getCumulativeTransform(); tm.combine(p.getTransform());
@@ -362,8 +318,7 @@ void SVGRenderer::renderPolyline(const Polyline& p) {
     float w = 1.f; if (attrs.count("stroke-width")) try { w = std::stof(attrs["stroke-width"]); }
     catch (...) {};
     sf::Color fill = stringToColor(attrs.count("fill") ? attrs["fill"] : "none", "fill"); if (fill != sf::Color::Transparent) { fill.a = getOpacity(attrs, "fill-opacity") * 255; drawConcaveShape(window, { pts }, fill); }
-
-    if (stroke.a > 0 && w > 0) drawStrokeMesh(window, pts, w, stroke, false); // False = Open
+    if (stroke.a > 0 && w > 0) { for (size_t i = 0;i < pts.size() - 1;++i) { drawSegment(window, pts[i], pts[i + 1], w, stroke); if (i > 0) drawLineJoin(window, pts[i - 1], pts[i], pts[i + 1], w, stroke, "round", 4.f); } }
 }
 void SVGRenderer::renderPolygon(const Polygon& p) {
     std::istringstream iss(p.getPoints()); std::vector<sf::Vector2f> pts; float x, y; char c; TransformMatrix tm = getCumulativeTransform(); tm.combine(p.getTransform());
@@ -374,8 +329,7 @@ void SVGRenderer::renderPolygon(const Polygon& p) {
     sf::Color stroke = stringToColor(attrs.count("stroke") ? attrs["stroke"] : "none", "stroke"); stroke.a = getOpacity(attrs, "stroke-opacity") * 255;
     float w = 1.f; if (attrs.count("stroke-width")) try { w = std::stof(attrs["stroke-width"]); }
     catch (...) {};
-
-    if (stroke.a > 0 && w > 0) drawStrokeMesh(window, pts, w, stroke, true); // True = Closed
+    if (stroke.a > 0 && w > 0) { for (size_t i = 0;i < pts.size();++i) { sf::Vector2f p1 = pts[i], p2 = pts[(i + 1) % pts.size()]; drawSegment(window, p1, p2, w, stroke); sf::Vector2f p0 = pts[(i == 0 ? pts.size() - 1 : i - 1)]; drawLineJoin(window, p0, p1, p2, w, stroke, "miter", 4.f); } }
 }
 void SVGRenderer::renderEllipse(const Ellipse& e) { renderCircle(Circle(e.getAttributes())); }
 
@@ -401,6 +355,13 @@ void SVGRenderer::renderPath(const Path& path) {
 
     float strokeWidth = 1.0f;
     if (attrs.count("stroke-width")) try { strokeWidth = std::stof(attrs["stroke-width"]); }
+    catch (...) {}
+
+    std::string lineJoin = "miter"; // Mặc định là nhọn
+    if (attrs.count("stroke-linejoin")) lineJoin = attrs["stroke-linejoin"];
+
+    float miterLimit = 4.0f;
+    if (attrs.count("stroke-miterlimit")) try { miterLimit = std::stof(attrs["stroke-miterlimit"]); }
     catch (...) {}
 
     // --- BƯỚC 1: GIẢI MÃ PATH ---
@@ -462,15 +423,39 @@ void SVGRenderer::renderPath(const Path& path) {
         }
     }
 
-    // --- BƯỚC 3: VẼ VIỀN SẮC NÉT (VECTOR EXTRUSION) ---
+    // --- BƯỚC 3: VẼ VIỀN SẮC NÉT (SHARP STROKE) ---
     if (strokeColor.a > 0 && strokeWidth > 0) {
         for (const auto& pathPts : subPaths) {
-            // Kiểm tra xem path này có kín không (đầu == cuối)
-            bool isClosed = false;
-            if (pathPts.size() > 2) {
-                if (getLength(pathPts.front() - pathPts.back()) < 0.1f) isClosed = true;
+            if (pathPts.size() < 2) continue;
+
+            for (size_t i = 0; i < pathPts.size() - 1; ++i) {
+                sf::Vector2f p1 = pathPts[i];
+                sf::Vector2f p2 = pathPts[i + 1];
+
+                // Vẽ thân (Segment)
+                drawSegment(window, p1, p2, strokeWidth, strokeColor);
+
+                // Vẽ khớp nối (Join)
+                if (i > 0) {
+                    sf::Vector2f p0 = pathPts[i - 1];
+                    drawLineJoin(window, p0, p1, p2, strokeWidth, strokeColor, lineJoin, miterLimit);
+                }
             }
-            drawStrokeMesh(window, pathPts, strokeWidth, strokeColor, isClosed);
+
+            // Xử lý đóng kín
+            sf::Vector2f start = pathPts.front();
+            sf::Vector2f end = pathPts.back();
+            if (getLength(start - end) < 0.1f && pathPts.size() > 2) {
+                sf::Vector2f pLastPrev = pathPts[pathPts.size() - 2];
+                sf::Vector2f pSecond = pathPts[1];
+                // Nối cuối và đầu bằng khớp Miter
+                drawLineJoin(window, pLastPrev, end, pSecond, strokeWidth, strokeColor, lineJoin, miterLimit);
+            }
+            else if (lineJoin == "round") {
+                sf::CircleShape cap(strokeWidth / 2.f); cap.setOrigin({ strokeWidth / 2.f, strokeWidth / 2.f }); cap.setFillColor(strokeColor);
+                cap.setPosition(start); window.draw(cap);
+                cap.setPosition(end); window.draw(cap);
+            }
         }
     }
 }

@@ -84,7 +84,7 @@ bool SVGParser::extractTagAndAttributes(const std::string &line, std::string &ta
 
     // 1. Lấy tên Tag
     ss >> tagName;
-
+    // std::cout << tagName << " ";
     if (tagName.empty())
         return false;
 
@@ -183,6 +183,10 @@ SVGElementPtr SVGParser::parseElementFromLine(const std::string &line)
     {
         return std::make_shared<Path>(attributes);
     }
+    // else if (tagName == "text")
+    // {
+    //     return std::make_shared<Text>(attributes);
+    // }
     // Bỏ qua các tag khác như <svg>, <g>, ...
 
     return nullptr;
