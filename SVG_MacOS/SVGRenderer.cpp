@@ -253,7 +253,30 @@ SVGRenderer::SVGRenderer(unsigned int width, unsigned int height) {
 
 // --- Triển khai các hàm thêm phần tử và render ---
 void SVGRenderer::addElement(std::shared_ptr<SVGElement> element) { if (element) elements.push_back(element); }
-void SVGRenderer::setViewBox(float x, float y, float w, float h) { if (w > 0 && h > 0) { view = sf::View(sf::FloatRect({ x, y }, { w, h })); window.setView(view); } }
+void SVGRenderer::setViewBox(float viewBoxX, float viewBoxY, float viewBoxW, float viewBoxH) {
+    // 1. Cập nhật biến view CỦA CLASS (bỏ chữ sf::View ở đầu đi)
+    view = sf::View(sf::FloatRect({viewBoxX, viewBoxY}, {viewBoxW, viewBoxH}));
+
+    // 2. Tính toán Viewport (giữ nguyên logic cũ)
+    sf::Vector2u winSize = window.getSize();
+    float windowRatio = static_cast<float>(winSize.x) / winSize.y;
+    float svgRatio = viewBoxW / viewBoxH;
+
+    float viewportX = 0.0f, viewportY = 0.0f, viewportW = 1.0f, viewportH = 1.0f;
+
+    if (windowRatio > svgRatio) {
+        viewportW = svgRatio / windowRatio;
+        viewportX = (1.0f - viewportW) / 2.0f;
+    } else {
+        viewportH = windowRatio / svgRatio;
+        viewportY = (1.0f - viewportH) / 2.0f;
+    }
+
+    view.setViewport(sf::FloatRect({viewportX, viewportY}, {viewportW, viewportH}));
+
+    // 3. Áp dụng view lên cửa sổ
+    window.setView(view);
+}
 void SVGRenderer::zoomIn() { view.zoom(0.9f); }
 void SVGRenderer::zoomOut() { view.zoom(1.1f); }
 void SVGRenderer::rotate(float angle) { view.rotate(sf::degrees(angle)); }
@@ -985,3 +1008,4 @@ void SVGRenderer::beginElement(const TransformMatrix& t, const Attributes& a) { 
 void SVGRenderer::endElement() { if (!renderStack_.empty()) renderStack_.pop_back(); }
 
 const TransformMatrix& SVGRenderer::getCumulativeTransform() const { static TransformMatrix i; return renderStack_.empty() ? i : renderStack_.back().cumulativeTransform; }
+
