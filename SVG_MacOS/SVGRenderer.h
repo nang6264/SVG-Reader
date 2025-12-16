@@ -45,7 +45,7 @@ private:
 
     bool isPanning = false;         // Cờ đánh dấu đang kéo chuột
     sf::Vector2i lastMousePos;      // Lưu vị trí chuột cũ để tính khoảng cách
-	bool isLeftMouseButtonPressed_ = false; // Cờ debounce chuột trái
+	// bool isLeftMouseButtonPressed_ = false; // Cờ debounce chuột trái
 
 	sf::RectangleShape helpMenuBackground_; // Nền của Menu hướng dẫn
 	sf::Text helpMenuText_;
