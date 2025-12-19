@@ -6,7 +6,7 @@
 #include <cmath>
 #include "SVGRenderer.h"
 
-// Hàm ti?n ích ki?m tra ký t? có th? là m?t ph?n c?a s?
+// HÃ m ti?n Ã­ch ki?m tra kÃ½ t? cÃ³ th? lÃ  m?t ph?n c?a s?
 bool isNumChar(char c) {
     return std::isdigit(c) || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E';
 }
@@ -20,7 +20,7 @@ Path::Path(const Attributes& attributes) : SVGElement(attributes) {
     }
 }
 
-// Phân tích chu?i l?nh trong thu?c tính "d"
+// PhÃ¢n tÃ­ch chu?i l?nh trong thu?c tÃ­nh "d"
 void Path::parsePathData() {
     size_t i = 0;
     size_t len = d_.length();
@@ -31,12 +31,20 @@ void Path::parsePathData() {
     auto readNumber = [&]() -> float {
         size_t start = i;
         if (i < len && (d_[i] == '-' || d_[i] == '+')) i++;
-        while (i < len && (std::isdigit(d_[i]) || d_[i] == '.')) i++;
+        bool hasDot = false;
+        while (i < len) {
+            if (std::isdigit(d_[i])) i++;
+            else if (d_[i] == '.' && !hasDot) { hasDot = true; i++; }
+            else break;
+        }
         if (i < len && (d_[i] == 'e' || d_[i] == 'E')) {
             i++; if (i < len && (d_[i] == '-' || d_[i] == '+')) i++;
             while (i < len && std::isdigit(d_[i])) i++;
         }
-        try { return std::stof(d_.substr(start, i - start)); }
+        try { 
+            std::string s = d_.substr(start, i - start); 
+            return std::stof(s);
+        }
         catch (...) { return 0.0f; }
         };
 
