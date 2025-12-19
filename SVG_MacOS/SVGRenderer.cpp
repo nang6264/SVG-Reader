@@ -1114,6 +1114,21 @@ void SVGRenderer::renderPath(const Path &path)
     Attributes a = getEffectiveAttributes(path.getAttributes());
     TransformMatrix tm = getCumulativeTransform();
     tm.combine(path.getTransform());
+
+    float scaleX = std::sqrt(tm.m[0] * tm.m[0] + tm.m[1] * tm.m[1]);
+    float scaleY = std::sqrt(tm.m[3] * tm.m[3] + tm.m[4] * tm.m[4]);
+    float avgScale = (scaleX + scaleY) / 2.0f;
+
+    float w = 1.0f;
+    if (a.count("stroke-width")) {
+        try { 
+            w = std::stof(a["stroke-width"]);
+        }
+        catch (...) {}
+    }
+
+    float finalStrokeWidth = w * avgScale;
+    
     sf::Color f = stringToColor(a.count("fill") ? a["fill"] : "black", "fill");
     if (f != sf::Color::Transparent)
     {
@@ -1125,16 +1140,6 @@ void SVGRenderer::renderPath(const Path &path)
     {
         st.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
     }
-
-    float w = 1.0f;
-    if (a.count("stroke-width"))
-        try
-        {
-            w = std::stof(a["stroke-width"]);
-        }
-        catch (...)
-        {
-        };
 
     // --- Xử lý hình học ---
     // subPaths: Dùng để TÔ MÀU (Cần clean điểm)
@@ -1258,7 +1263,18 @@ void SVGRenderer::renderPath(const Path &path)
                 currentSubPathClosed = true;
             }
         }
-        // ... (Các lệnh S, Q, T, A giữ nguyên logic cũ nếu có) ...
+        else if (t == 'S' || t == 's') {
+            sf::Vector2f p3 = (t == 'S') ? sf::Vector2f(args[2], args[3]) : curPos + sf::Vector2f(args[2], args[3]);
+            curPts.push_back(p3);
+            curPos = p3;
+        }
+        else if (t == 'Q' || t == 'q') {
+            // Quadratic Bezier
+            sf::Vector2f p1 = (t == 'Q') ? sf::Vector2f(args[0], args[1]) : curPos + sf::Vector2f(args[0], args[1]);
+            sf::Vector2f p2 = (t == 'Q') ? sf::Vector2f(args[2], args[3]) : curPos + sf::Vector2f(args[2], args[3]);
+            curPts.push_back(p2);
+            curPos = p2;
+        }
     }
 
     // Lưu subPath cuối cùng
@@ -1364,13 +1380,11 @@ void SVGRenderer::renderPath(const Path &path)
 
     // --- 2. VẼ VIỀN (Stroke) ---
     // Dùng strokePaths nguyên bản -> Fix lỗi mất viền
-    if (st != sf::Color::Transparent && w > 0)
+    if (st != sf::Color::Transparent && finalStrokeWidth > 0)
     {
         for (const auto &part : strokePaths)
         {
-            if (part.points.size() < 2)
-                continue;
-            drawSharpStroke(window, part.points, w, st, part.isClosed);
+            drawSharpStroke(window, part.points, finalStrokeWidth, st, part.isClosed);
         }
     }
 }
@@ -1402,3 +1416,4 @@ const TransformMatrix &SVGRenderer::getCumulativeTransform() const
     static TransformMatrix i;
     return renderStack_.empty() ? i : renderStack_.back().cumulativeTransform;
 }
+
