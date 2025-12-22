@@ -8,7 +8,7 @@
 #include <string>
 #include <map>
 #include "Transform.h"   // Để dùng TransformMatrix trong RenderState
-
+#include "Gradient.h"
 class Path;
 class SVGElement;
 class Circle;
@@ -46,6 +46,11 @@ private:
     bool isPanning = false;         // Cờ đánh dấu đang kéo chuột
     sf::Vector2i lastMousePos;      // Lưu vị trí chuột cũ để tính khoảng cách
 	// bool isLeftMouseButtonPressed_ = false; // Cờ debounce chuột trái
+
+    std::map<std::string, Gradient> gradients_; 
+
+    // [THÊM] Hàm xử lý màu
+    std::pair<bool, sf::Color> resolveColor(const std::string& fillStr, float opacity);
 
 	sf::RectangleShape helpMenuBackground_; // Nền của Menu hướng dẫn
 	sf::Text helpMenuText_;

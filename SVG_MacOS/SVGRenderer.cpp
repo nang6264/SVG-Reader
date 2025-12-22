@@ -137,6 +137,40 @@ bool getLineIntersection(sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3, sf::
     return false;
 }
 
+// xu li fallback
+std::pair<bool, sf::Color> SVGRenderer::resolveColor(const std::string &fillStr, float opacity)
+{
+    if (fillStr.find("url(") != std::string::npos)
+    {
+        size_t start = fillStr.find("#");
+        size_t end = fillStr.find(")");
+
+        if (start != std::string::npos && end != std::string::npos)
+        {
+            std::string id = fillStr.substr(start + 1, end - start - 1);
+
+            auto it = gradients_.find(id);
+            if (it != gradients_.end())
+            {
+                // TÌM THẤY GRADIENT
+                return {true, it->second.getAverageColor(opacity)};
+            }
+            else
+            {
+                // KHÔNG TÌM THẤY -> Fallback
+                // std::cerr << "Warning: Gradient ID #" << id << " not found!\n";
+                return {false, sf::Color::Black};
+            }
+        }
+    }
+
+    // Xử lý màu thường
+    sf::Color color = stringToColor(fillStr, "fill");
+    // [SFML 3.0] Dùng std::uint8_t
+    color.a = static_cast<std::uint8_t>(color.a * opacity);
+    return {false, color};
+}
+
 // Sửa lại điểm đa giác ngôi sao thành đa giác đơn bao quanh
 std::vector<sf::Vector2f> fixStarPolygon(const std::vector<sf::Vector2f> &pts)
 {
@@ -607,49 +641,185 @@ Attributes SVGRenderer::getEffectiveAttributes(const Attributes &localAttrs) con
 // --- Basic Renderers ---
 
 // vẽ hình tròn
+// void SVGRenderer::renderCircle(const Circle &c)
+// {
+//     // 1. Lấy thuộc tính (bao gồm kế thừa)
+//     Attributes attrs = getEffectiveAttributes(c.getAttributes());
+
+//     // 2. Setup hình tròn cơ bản
+//     float r = static_cast<float>(c.getR());
+//     sf::CircleShape s(r);
+
+//     // SFML 3.0: Dùng ngoặc nhọn {} cho setOrigin
+//     s.setOrigin({r, r});
+//     s.setPosition({static_cast<float>(c.getCx()), static_cast<float>(c.getCy())});
+
+//     // Tăng độ mịn
+//     unsigned int points = static_cast<unsigned int>(std::max(50.0f, r * 4.0f));
+//     s.setPointCount(points);
+
+//     // [SỬA LỖI QUAN TRỌNG]
+//     // Nếu thiếu thuộc tính fill, mặc định là "black" thay vì "none"
+//     std::string fillStr = attrs.count("fill") ? attrs["fill"] : "black";
+
+//     sf::Color f = stringToColor(fillStr, "fill");
+//     if (f != sf::Color::Transparent)
+//     {
+//         f.a = static_cast<std::uint8_t>(getOpacity(attrs, "fill-opacity") * 255);
+//         s.setFillColor(f);
+//     }
+//     else
+//     {
+//         s.setFillColor(sf::Color::Transparent);
+//     }
+
+//     // Xử lý viền (Stroke)
+//     std::string strokeStr = attrs.count("stroke") ? attrs["stroke"] : "none";
+//     if (strokeStr != "none")
+//     {
+//         sf::Color st = stringToColor(strokeStr, "stroke");
+//         if (st != sf::Color::Transparent)
+//         {
+//             st.a = static_cast<std::uint8_t>(getOpacity(attrs, "stroke-opacity") * 255);
+//             s.setOutlineColor(st);
+//             float w = 1.0f;
+//             if (attrs.count("stroke-width"))
+//                 try
+//                 {
+//                     w = std::stof(attrs["stroke-width"]);
+//                 }
+//                 catch (...)
+//                 {
+//                 }
+//             s.setOutlineThickness(w);
+//         }
+//     }
+
+//     // 4. Transform (Scale/Rotate/Translate)
+//     TransformMatrix tm = getCumulativeTransform();
+//     tm.combine(c.getTransform());
+
+//     sf::RenderStates states;
+//     states.transform = getSFMLTransform(tm);
+
+//     window.draw(s, states);
+// }
+
 void SVGRenderer::renderCircle(const Circle &c)
 {
-    // 1. Lấy thuộc tính (bao gồm kế thừa)
+    // 1. Lấy các thuộc tính cơ bản
     Attributes attrs = getEffectiveAttributes(c.getAttributes());
+    float opacity = getOpacity(attrs, "fill-opacity");
+    std::string fillStr = attrs.count("fill") ? attrs["fill"] : "black";
 
-    // 2. Setup hình tròn cơ bản
+    // 2. [CODE CỦA BẠN] Giải quyết màu sắc & Fallback
+    // Hàm này sẽ trả về {true, màu_trung_bình} nếu là gradient
+    // hoặc {false, màu_thường} nếu là màu đơn sắc.
+    auto result = resolveColor(fillStr, opacity);
+    bool isGradient = result.first;
+    sf::Color solidColor = result.second;
+
+    // 3. Thiết lập Ma trận biến đổi (Transform)
+    TransformMatrix tm = getCumulativeTransform();
+    tm.combine(c.getTransform());
+    sf::RenderStates states;
+    states.transform = getSFMLTransform(tm);
+
+    // Chuẩn bị biến để kiểm tra xem Gradient có vẽ thành công không
+    bool gradientDrawn = false;
+
+    // 4. [TASK 1 OPTIMIZATION] Xử lý vẽ Gradient (nếu có)
+    if (isGradient)
+    {
+        // Lấy ID từ chuỗi url(#id)
+        size_t start = fillStr.find("#") + 1;
+        size_t end = fillStr.find(")");
+        std::string id = fillStr.substr(start, end - start);
+
+        // Tìm trong map gradients_ (Đảm bảo an toàn vì resolveColor đã check rồi)
+        const Gradient &grad = gradients_[id];
+
+        // Chỉ xử lý Radial Gradient tại đây (Linear để tính sau hoặc fallback)
+        if (grad.type == "radial")
+        {
+            float cx = static_cast<float>(c.getCx());
+            float cy = static_cast<float>(c.getCy());
+            float r = static_cast<float>(c.getR());
+
+            // Số lượng tam giác để tạo hình tròn (càng lớn càng mịn nhưng nặng hơn)
+            // 64 là con số cân bằng giữa đẹp và hiệu năng
+            int segments = 64;
+
+            // SFML 3.0: VertexArray TriangleFan là cách nhanh nhất để vẽ gradient tỏa tròn
+            sf::VertexArray fan(sf::PrimitiveType::TriangleFan, segments + 2);
+
+            // -- ĐỈNH TÂM (Màu tại offset 0%) --
+            sf::Color centerCol = grad.stops.front().color;
+            centerCol.a = static_cast<std::uint8_t>(centerCol.a * opacity);
+
+            // [SFML 3.0] Cần truyền sf::Vector2f(x, y) rõ ràng
+            fan[0] = sf::Vertex{sf::Vector2f(cx, cy), centerCol};
+
+            // -- CÁC ĐỈNH VIỀN (Màu tại offset 100%) --
+            sf::Color outerCol = grad.stops.back().color;
+            outerCol.a = static_cast<std::uint8_t>(outerCol.a * opacity);
+
+            float angleStep = 2.0f * 3.14159265f / segments; // 2*PI / segments
+
+            for (int i = 0; i <= segments; ++i)
+            {
+                float angle = i * angleStep;
+                float px = cx + std::cos(angle) * r;
+                float py = cy + std::sin(angle) * r;
+
+                // [SFML 3.0] Khởi tạo Vertex
+                fan[i + 1] = sf::Vertex{sf::Vector2f(px, py), outerCol};
+            }
+
+            // Vẽ Gradient ngay lập tức
+            window.draw(fan, states);
+            gradientDrawn = true;
+        }
+    }
+
+    // 5. Chuẩn bị hình tròn cơ bản (Dùng cho Fallback HOẶC vẽ Viền)
     float r = static_cast<float>(c.getR());
     sf::CircleShape s(r);
 
-    // SFML 3.0: Dùng ngoặc nhọn {} cho setOrigin
+    // [SFML 3.0] Set Origin và Position dùng danh sách khởi tạo {}
     s.setOrigin({r, r});
     s.setPosition({static_cast<float>(c.getCx()), static_cast<float>(c.getCy())});
+    s.setPointCount(100); // Độ mịn của viền
 
-    // Tăng độ mịn
-    unsigned int points = static_cast<unsigned int>(std::max(50.0f, r * 4.0f));
-    s.setPointCount(points);
-
-    // [SỬA LỖI QUAN TRỌNG]
-    // Nếu thiếu thuộc tính fill, mặc định là "black" thay vì "none"
-    std::string fillStr = attrs.count("fill") ? attrs["fill"] : "black";
-
-    sf::Color f = stringToColor(fillStr, "fill");
-    if (f != sf::Color::Transparent)
+    // 6. Xử lý logic Fill (Tô màu nền)
+    if (gradientDrawn)
     {
-        f.a = static_cast<std::uint8_t>(getOpacity(attrs, "fill-opacity") * 255);
-        s.setFillColor(f);
+        // Nếu đã vẽ Gradient rồi thì nền của CircleShape để trong suốt
+        s.setFillColor(sf::Color::Transparent);
     }
     else
     {
-        s.setFillColor(sf::Color::Transparent);
+        // [FALLBACK] Nếu chưa vẽ Gradient (do lỗi hoặc do là màu thường)
+        // -> Dùng màu solidColor mà resolveColor đã tính toán
+        s.setFillColor(solidColor);
     }
 
-    // Xử lý viền (Stroke)
+    // 7. Xử lý logic Stroke (Viền) - Giữ nguyên logic cũ của nhóm
+    bool hasStroke = false;
     std::string strokeStr = attrs.count("stroke") ? attrs["stroke"] : "none";
+
     if (strokeStr != "none")
     {
         sf::Color st = stringToColor(strokeStr, "stroke");
         if (st != sf::Color::Transparent)
         {
+            hasStroke = true;
             st.a = static_cast<std::uint8_t>(getOpacity(attrs, "stroke-opacity") * 255);
             s.setOutlineColor(st);
+
             float w = 1.0f;
             if (attrs.count("stroke-width"))
+            {
                 try
                 {
                     w = std::stof(attrs["stroke-width"]);
@@ -657,18 +827,19 @@ void SVGRenderer::renderCircle(const Circle &c)
                 catch (...)
                 {
                 }
+            }
             s.setOutlineThickness(w);
         }
     }
 
-    // 4. Transform (Scale/Rotate/Translate)
-    TransformMatrix tm = getCumulativeTransform();
-    tm.combine(c.getTransform());
-
-    sf::RenderStates states;
-    states.transform = getSFMLTransform(tm);
-
-    window.draw(s, states);
+    // 8. Vẽ CircleShape (Nếu cần)
+    // Chúng ta chỉ vẽ vòng tròn này nếu:
+    // - Trường hợp 1: Gradient CHƯA được vẽ (cần vẽ nền màu solid fallback)
+    // - Trường hợp 2: Có viền (Gradient vẽ rồi nhưng vẫn cần vẽ viền đè lên)
+    if (!gradientDrawn || hasStroke)
+    {
+        window.draw(s, states);
+    }
 }
 
 // vẽ hình chữ nhật
@@ -1120,15 +1291,19 @@ void SVGRenderer::renderPath(const Path &path)
     float avgScale = (scaleX + scaleY) / 2.0f;
 
     float w = 1.0f;
-    if (a.count("stroke-width")) {
-        try { 
+    if (a.count("stroke-width"))
+    {
+        try
+        {
             w = std::stof(a["stroke-width"]);
         }
-        catch (...) {}
+        catch (...)
+        {
+        }
     }
 
     float finalStrokeWidth = w * avgScale;
-    
+
     sf::Color f = stringToColor(a.count("fill") ? a["fill"] : "black", "fill");
     if (f != sf::Color::Transparent)
     {
@@ -1263,17 +1438,27 @@ void SVGRenderer::renderPath(const Path &path)
                 currentSubPathClosed = true;
             }
         }
-        else if (t == 'S' || t == 's') {
+        else if (t == 'S' || t == 's')
+        {
             sf::Vector2f p3 = (t == 'S') ? sf::Vector2f(args[2], args[3]) : curPos + sf::Vector2f(args[2], args[3]);
             curPts.push_back(p3);
             curPos = p3;
         }
-        else if (t == 'Q' || t == 'q') {
-            // Quadratic Bezier
-            sf::Vector2f p1 = (t == 'Q') ? sf::Vector2f(args[0], args[1]) : curPos + sf::Vector2f(args[0], args[1]);
-            sf::Vector2f p2 = (t == 'Q') ? sf::Vector2f(args[2], args[3]) : curPos + sf::Vector2f(args[2], args[3]);
-            curPts.push_back(p2);
-            curPos = p2;
+        else if (t == 'Q' || t == 'q')
+        {
+            // Quadratic Bezier (P0, P1, P2) -> Cubic Bezier (P0, C1, C2, P2)
+            // C1 = P0 + 2/3 * (P1 - P0)
+            // C2 = P2 + 2/3 * (P1 - P2)
+
+            sf::Vector2f P0 = curPos;
+            sf::Vector2f P1 = (t == 'Q') ? sf::Vector2f(args[0], args[1]) : curPos + sf::Vector2f(args[0], args[1]);
+            sf::Vector2f P2 = (t == 'Q') ? sf::Vector2f(args[2], args[3]) : curPos + sf::Vector2f(args[2], args[3]);
+
+            sf::Vector2f C1 = P0 + (2.0f / 3.0f) * (P1 - P0);
+            sf::Vector2f C2 = P2 + (2.0f / 3.0f) * (P1 - P2);
+
+            addBezier(P0, C1, C2, P2); // Hàm này vẽ cubic bezier
+            curPos = P2;
         }
     }
 
@@ -1416,4 +1601,3 @@ const TransformMatrix &SVGRenderer::getCumulativeTransform() const
     static TransformMatrix i;
     return renderStack_.empty() ? i : renderStack_.back().cumulativeTransform;
 }
-
