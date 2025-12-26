@@ -57,6 +57,14 @@ private:
 	
 	void initializeHelpMenu();
 	void drawHelpMenu();
+
+    // Render linear gradient
+    void renderLinearGradientRect(const Rect& r, const Gradient& grad,
+        const TransformMatrix& tm, float opacity);
+
+    // Render radial gradient
+    void renderRadialGradientRect(const Rect& r, const Gradient& grad,
+        const TransformMatrix& tm, float opacity);
 public:
     // Constructor, tạo cửa sổ SFML
     SVGRenderer(unsigned int width = 800, unsigned int height = 600);
@@ -66,6 +74,8 @@ public:
 
     // Bắt đầu vòng lặp vẽ chính (main loop)
     void render();
+
+    void setGradients(const std::map<std::string, Gradient>& gradients);
 
     // --- Các hàm render cụ thể (Interface) ---
     // Được gọi bởi hàm draw() đa hình của các lớp SVGElement

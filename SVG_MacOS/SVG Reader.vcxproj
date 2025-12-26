@@ -104,14 +104,14 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\Default\Downloads\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\S-Funn\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp23</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;sfml-audio-d.lib;sfml-network-d.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\Default\Downloads\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\S-Funn\Downloads\SFML-3.0.2-windows-vc17-64-bit\SFML-3.0.2\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -142,6 +142,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="earcut.hpp" />
+    <ClInclude Include="Gradient.h" />
     <ClInclude Include="Group.h" />
     <ClInclude Include="SVGElement.h" />
     <ClInclude Include="SVGParser.h" />
@@ -152,11 +153,19 @@
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include=".gitkeep" />
+    <None Include="firefox.svg" />
     <None Include="build\my_svg_app" />
     <None Include="build\my_svg_app.dSYM\Contents\Resources\DWARF\my_svg_app" />
     <None Include="build\my_svg_app.dSYM\Contents\Resources\Relocations\aarch64\my_svg_app.yml" />
+    <None Include="download.htm">
+      <DeploymentContent>true</DeploymentContent>
+    </None>
     <None Include="final_test.svg" />
-    <None Include="gemini.svg" />
+    <None Include="ig.svg" />
+    <None Include="gradient.svg" />
+    <None Include="apple.svg" />
+    <None Include="chrome.svg" />
+    <None Include="path.svg" />
     <None Include="sample.svg" />
     <None Include="svg-01.svg" />
     <None Include="svg-02.svg" />
@@ -176,6 +185,10 @@
     <None Include="svg-16.svg" />
     <None Include="svg-17.svg" />
     <None Include="svg-18.svg" />
+    <None Include="test_nested_transform.svg" />
+  </ItemGroup>
+  <ItemGroup>
+    <Xml Include="svg.xml" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

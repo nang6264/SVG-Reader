@@ -7,6 +7,7 @@
 #include <fstream>
 #include <memory>
 #include "SVGElement.h"
+#include "Gradient.h"
 
 using SVGElementPtr = std::shared_ptr<SVGElement>;
 
@@ -29,8 +30,11 @@ private:
     // Danh sách các phần tử SVG đã được phân tích thành công
     ElementList elements_;
 
-    // [THÊM MỚI] Biến lưu header
+    // Biến lưu header
     SVGHeader header_;
+
+    // Map lưu gradient đã parse
+    std::map<std::string, Gradient> gradients_;
 
     // Phân tích một dòng chứa tag/thuộc tính
     SVGElementPtr parseElementFromLine(const std::string& line);
@@ -38,6 +42,11 @@ private:
     // Trích xuất tên tag và map thuộc tính từ một chuỗi
     bool extractTagAndAttributes(const std::string& line, std::string& tagName, Attributes& attributes) const;
 
+    // Hàm parse gradient
+    Gradient parseGradient(std::ifstream& file, const std::string& tagName,
+        const Attributes& attributes);
+
+    sf::Color stringToColor(const std::string& colorStr, const std::string& type) const;
 public:
     SVGParser() = default;
 
@@ -52,6 +61,9 @@ public:
     const ElementList& getElements() const;
 
     const SVGHeader& getHeader() const { return header_; }
+
+    const std::map<std::string, Gradient>& getGradients() const { return gradients_; }
+    std::map<std::string, Gradient> takeGradients() { return std::move(gradients_); }
 };
 //
 #endif // SVG_READER_SVGPARSER_H

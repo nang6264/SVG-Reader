@@ -24,14 +24,14 @@
     <Filter Include="TestCases">
       <UniqueIdentifier>{6b28e963-0fc4-442a-9f67-a4e9063d03e7}</UniqueIdentifier>
     </Filter>
-    <Filter Include="src\Group">
-      <UniqueIdentifier>{26a7fcd1-53c2-4d31-ae08-89261271dffa}</UniqueIdentifier>
-    </Filter>
     <Filter Include="src\app">
       <UniqueIdentifier>{706b21ff-7196-41f3-af64-e1493c8b18a3}</UniqueIdentifier>
     </Filter>
     <Filter Include="src\Path">
       <UniqueIdentifier>{ad2c45b2-9d8e-4c11-9901-20fea2090d0f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\model\Group">
+      <UniqueIdentifier>{26a7fcd1-53c2-4d31-ae08-89261271dffa}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -51,7 +51,7 @@
       <Filter>src\Transform</Filter>
     </ClCompile>
     <ClCompile Include="Group.cpp">
-      <Filter>src\Group</Filter>
+      <Filter>src\model\Group</Filter>
     </ClCompile>
     <ClCompile Include="SVGPath.cpp">
       <Filter>src\Path</Filter>
@@ -79,12 +79,15 @@
     <ClInclude Include="earcut.hpp">
       <Filter>include</Filter>
     </ClInclude>
+    <ClInclude Include="Gradient.h">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include=".gitkeep" />
     <None Include="sample.svg" />
-    <None Include="gemini.svg" />
+    <None Include="ig.svg" />
     <None Include="build\my_svg_app">
       <Filter>src\app</Filter>
     </None>
@@ -113,5 +116,15 @@
     <None Include="svg-16.svg" />
     <None Include="svg-17.svg" />
     <None Include="svg-18.svg" />
+    <None Include="firefox.svg" />
+    <None Include="download.htm" />
+    <None Include="apple.svg" />
+    <None Include="chrome.svg" />
+    <None Include="path.svg" />
+    <None Include="test_nested_transform.svg" />
+    <None Include="gradient.svg" />
+  </ItemGroup>
+  <ItemGroup>
+    <Xml Include="svg.xml" />
   </ItemGroup>
 </Project>
