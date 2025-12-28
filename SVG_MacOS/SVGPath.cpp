@@ -27,7 +27,10 @@ void Path::parsePathData() {
     char currentCmd = 0;
     std::vector<float> argsBuffer;
 
-    auto skipSeparators = [&]() { while (i < len && (std::isspace(d_[i]) || d_[i] == ',')) i++; };
+    auto skipSeparators = [&]() {
+        while (i < len && (std::isspace(d_[i]) || d_[i] == ',')) i++;
+        };
+
     auto readNumber = [&]() -> float {
         size_t start = i;
         if (i < len && (d_[i] == '-' || d_[i] == '+')) i++;
@@ -38,35 +41,52 @@ void Path::parsePathData() {
             else break;
         }
         if (i < len && (d_[i] == 'e' || d_[i] == 'E')) {
-            i++; if (i < len && (d_[i] == '-' || d_[i] == '+')) i++;
+            i++;
+            if (i < len && (d_[i] == '-' || d_[i] == '+')) i++;
             while (i < len && std::isdigit(d_[i])) i++;
         }
-        try { 
-            std::string s = d_.substr(start, i - start); 
-            return std::stof(s);
+        try {
+            return std::stof(d_.substr(start, i - start));
         }
-        catch (...) { return 0.0f; }
+        catch (...) {
+            return 0.0f;
+        }
         };
 
     auto flushCommand = [&]() {
         if (currentCmd == 0) return;
         char upperCmd = std::toupper(currentCmd);
         int requiredArgs = 0;
-        if (upperCmd == 'M' || upperCmd == 'L' || upperCmd == 'T') requiredArgs = 2;
-        else if (upperCmd == 'H' || upperCmd == 'V') requiredArgs = 1;
-        else if (upperCmd == 'S' || upperCmd == 'Q') requiredArgs = 4;
-        else if (upperCmd == 'C') requiredArgs = 6;
-        else if (upperCmd == 'A') requiredArgs = 7;
-        else if (upperCmd == 'Z') requiredArgs = 0;
 
-        if (upperCmd == 'Z') { commands_.push_back({ currentCmd, {} }); argsBuffer.clear(); return; }
+        if (upperCmd == 'M' || upperCmd == 'L' || upperCmd == 'T')
+            requiredArgs = 2;
+        else if (upperCmd == 'H' || upperCmd == 'V')
+            requiredArgs = 1;
+        else if (upperCmd == 'S' || upperCmd == 'Q')
+            requiredArgs = 4;
+        else if (upperCmd == 'C')
+            requiredArgs = 6;
+        else if (upperCmd == 'A')
+            requiredArgs = 7;
+        else if (upperCmd == 'Z')
+            requiredArgs = 0;
+
+        if (upperCmd == 'Z') {
+            commands_.push_back({ currentCmd, {} });
+            argsBuffer.clear();
+            return;
+        }
 
         size_t processed = 0;
         while (processed + requiredArgs <= argsBuffer.size()) {
-            PathCommand cmd; cmd.type = currentCmd;
-            for (int k = 0; k < requiredArgs; ++k) cmd.args.push_back(argsBuffer[processed + k]);
+            PathCommand cmd;
+            cmd.type = currentCmd;
+            for (int k = 0; k < requiredArgs; ++k)
+                cmd.args.push_back(argsBuffer[processed + k]);
             commands_.push_back(cmd);
             processed += requiredArgs;
+
+            // M -> L chaining
             if (currentCmd == 'M') currentCmd = 'L';
             else if (currentCmd == 'm') currentCmd = 'l';
         }
@@ -77,13 +97,18 @@ void Path::parsePathData() {
         skipSeparators();
         if (i >= len) break;
         char c = d_[i];
+
         if (std::isalpha(c)) {
-            argsBuffer.clear(); currentCmd = c; i++;
-            if (std::toupper(currentCmd) == 'Z') flushCommand();
+            argsBuffer.clear();
+            currentCmd = c;
+            i++;
+            if (std::toupper(currentCmd) == 'Z')
+                flushCommand();
         }
         else if (isNumChar(c)) {
             if (currentCmd == 0) { i++; continue; }
             argsBuffer.push_back(readNumber());
+
             char upperCmd = std::toupper(currentCmd);
             int needed = 0;
             if (upperCmd == 'M' || upperCmd == 'L' || upperCmd == 'T') needed = 2;
@@ -91,11 +116,12 @@ void Path::parsePathData() {
             else if (upperCmd == 'S' || upperCmd == 'Q') needed = 4;
             else if (upperCmd == 'C') needed = 6;
             else if (upperCmd == 'A') needed = 7;
-            if (argsBuffer.size() == needed) flushCommand();
+
+            if (argsBuffer.size() == needed)
+                flushCommand();
         }
         else i++;
     }
 }
-
 // V? Path s? d?ng SVGRenderer
 void Path::draw(SVGRenderer& renderer) const { renderer.renderPath(*this); }

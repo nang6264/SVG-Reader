@@ -666,7 +666,7 @@ void SVGRenderer::renderCircle(const Circle& c)
 
     bool gradientDrawn = false;
 
-    // Xử lý Radial Gradient với Multi-Stop
+    // Xử lý Gradient (Linear và Radial)
     if (isGradient) {
         size_t start = fillStr.find("#") + 1;
         size_t end = fillStr.find(")");
@@ -676,17 +676,20 @@ void SVGRenderer::renderCircle(const Circle& c)
         if (it != gradients_.end()) {
             const Gradient& grad = it->second;
 
+            float cx = static_cast<float>(c.getCx());
+            float cy = static_cast<float>(c.getCy());
+            float r = static_cast<float>(c.getR());
+
+            const int segments = 64;  // Số cạnh hình tròn
+            const int rings = 20;     // Số vòng tròn đồng tâm
+
+            // Tính bounding box cho Linear Gradient
+            sf::FloatRect bbox({ cx - r, cy - r }, { 2.0f * r, 2.0f * r });
+
+            sf::VertexArray vertices(sf::PrimitiveType::Triangles);
+
+            // RADIAL GRADIENT
             if (grad.type == "radial") {
-                float cx = static_cast<float>(c.getCx());
-                float cy = static_cast<float>(c.getCy());
-                float r = static_cast<float>(c.getR());
-
-                // Vẽ gradient với NHIỀU STOPS
-                const int segments = 64;  // Số cạnh hình tròn
-                const int rings = 20;     // Số vòng tròn đồng tâm (cho multi-stop)
-
-                sf::VertexArray vertices(sf::PrimitiveType::Triangles);
-
                 for (int ring = 0; ring < rings; ring++) {
                     float innerRadius = (ring / (float)rings) * r;
                     float outerRadius = ((ring + 1) / (float)rings) * r;
@@ -734,6 +737,56 @@ void SVGRenderer::renderCircle(const Circle& c)
                 window.draw(vertices, states);
                 gradientDrawn = true;
             }
+            // LINEAR GRADIENT
+            else if (grad.type == "linear") {
+                for (int ring = 0; ring < rings; ring++) {
+                    float innerRadius = (ring / (float)rings) * r;
+                    float outerRadius = ((ring + 1) / (float)rings) * r;
+
+                    float angleStep = 2.0f * M_PI / segments;
+
+                    for (int i = 0; i < segments; i++) {
+                        float angle1 = i * angleStep;
+                        float angle2 = (i + 1) * angleStep;
+
+                        // Inner ring points
+                        float ix1 = cx + std::cos(angle1) * innerRadius;
+                        float iy1 = cy + std::sin(angle1) * innerRadius;
+                        float ix2 = cx + std::cos(angle2) * innerRadius;
+                        float iy2 = cy + std::sin(angle2) * innerRadius;
+
+                        // Outer ring points
+                        float ox1 = cx + std::cos(angle1) * outerRadius;
+                        float oy1 = cy + std::sin(angle1) * outerRadius;
+                        float ox2 = cx + std::cos(angle2) * outerRadius;
+                        float oy2 = cy + std::sin(angle2) * outerRadius;
+
+                        // Lấy màu Linear Gradient cho từng đỉnh
+                        sf::Color c1 = grad.getLinearColorAt(ix1, iy1, bbox);
+                        sf::Color c2 = grad.getLinearColorAt(ix2, iy2, bbox);
+                        sf::Color c3 = grad.getLinearColorAt(ox1, oy1, bbox);
+                        sf::Color c4 = grad.getLinearColorAt(ox2, oy2, bbox);
+
+                        c1.a = static_cast<std::uint8_t>(c1.a * opacity);
+                        c2.a = static_cast<std::uint8_t>(c2.a * opacity);
+                        c3.a = static_cast<std::uint8_t>(c3.a * opacity);
+                        c4.a = static_cast<std::uint8_t>(c4.a * opacity);
+
+                        // Triangle 1
+                        vertices.append(sf::Vertex(sf::Vector2f(ix1, iy1), c1));
+                        vertices.append(sf::Vertex(sf::Vector2f(ox1, oy1), c3));
+                        vertices.append(sf::Vertex(sf::Vector2f(ix2, iy2), c2));
+
+                        // Triangle 2
+                        vertices.append(sf::Vertex(sf::Vector2f(ix2, iy2), c2));
+                        vertices.append(sf::Vertex(sf::Vector2f(ox1, oy1), c3));
+                        vertices.append(sf::Vertex(sf::Vector2f(ox2, oy2), c4));
+                    }
+                }
+
+                window.draw(vertices, states);
+                gradientDrawn = true;
+            }
         }
     }
 
@@ -751,7 +804,7 @@ void SVGRenderer::renderCircle(const Circle& c)
         s.setFillColor(solidColor);
     }
 
-    // [CODE CŨ] Xử lý stroke
+    // Xử lý stroke
     bool hasStroke = false;
     std::string strokeStr = attrs.count("stroke") ? attrs["stroke"] : "none";
     if (strokeStr != "none") {
@@ -775,7 +828,7 @@ void SVGRenderer::renderCircle(const Circle& c)
 
 
 // vẽ hình chữ nhật
-void SVGRenderer::renderRect(const Rect &r)
+void SVGRenderer::renderRect(const Rect& r)
 {
     // Lấy transform
     Attributes a = getEffectiveAttributes(r.getAttributes());
@@ -784,13 +837,12 @@ void SVGRenderer::renderRect(const Rect &r)
 
     // Tính bounding box
     float x = r.getX(), y = r.getY(), w = r.getWidth(), h = r.getHeight();
-    sf::FloatRect bbox({ x, y }, { w, h });
 
     // Xử lý Fill
     std::string fillStr = a.count("fill") ? a["fill"] : "black";
     float fillOpacity = getOpacity(a, "fill-opacity");
 
-    // Check gradient
+    // Check gradient và gọi hàm render gradient
     if (fillStr.find("url(#") != std::string::npos) {
         size_t start = fillStr.find("#") + 1;
         size_t end = fillStr.find(")");
@@ -800,31 +852,83 @@ void SVGRenderer::renderRect(const Rect &r)
         if (it != gradients_.end()) {
             const Gradient& grad = it->second;
 
-            // Vẽ Linear Gradient pixel-by-pixel
+            // Vẽ Linear Gradient
             if (grad.type == "linear") {
                 renderLinearGradientRect(r, grad, tm, fillOpacity);
-                return;  // Done, không cần vẽ solid color
+
+                // Vẽ stroke nếu có
+                std::string strokeStr = a.count("stroke") ? a["stroke"] : "none";
+                sf::Color st = stringToColor(strokeStr, "stroke");
+                if (st != sf::Color::Transparent) {
+                    st.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
+                    float th = 1.f;
+                    if (a.count("stroke-width"))
+                        try { th = std::stof(a["stroke-width"]); }
+                    catch (...) {}
+
+                    if (st.a > 0 && th > 0) {
+                        std::vector<sf::Vector2f> pts;
+                        pts.push_back({ x, y });
+                        pts.push_back({ x + w, y });
+                        pts.push_back({ x + w, y + h });
+                        pts.push_back({ x, y + h });
+
+                        for (auto& p : pts) {
+                            float tx, ty;
+                            tm.transformPoint(p.x, p.y, tx, ty);
+                            p.x = tx; p.y = ty;
+                        }
+                        drawSharpStroke(window, pts, th, st, true);
+                    }
+                }
+                return;  // Xong, không cần vẽ solid color
             }
             // Vẽ Radial Gradient
             else if (grad.type == "radial") {
                 renderRadialGradientRect(r, grad, tm, fillOpacity);
+
+                // Vẽ stroke nếu có (tương tự linear)
+                std::string strokeStr = a.count("stroke") ? a["stroke"] : "none";
+                sf::Color st = stringToColor(strokeStr, "stroke");
+                if (st != sf::Color::Transparent) {
+                    st.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
+                    float th = 1.f;
+                    if (a.count("stroke-width"))
+                        try { th = std::stof(a["stroke-width"]); }
+                    catch (...) {}
+
+                    if (st.a > 0 && th > 0) {
+                        std::vector<sf::Vector2f> pts;
+                        pts.push_back({ x, y });
+                        pts.push_back({ x + w, y });
+                        pts.push_back({ x + w, y + h });
+                        pts.push_back({ x, y + h });
+
+                        for (auto& p : pts) {
+                            float tx, ty;
+                            tm.transformPoint(p.x, p.y, tx, ty);
+                            p.x = tx; p.y = ty;
+                        }
+                        drawSharpStroke(window, pts, th, st, true);
+                    }
+                }
                 return;
             }
         }
         else {
-            // Fallback: Gradient không tìm thấy
-            sf::Color fallbackColor = sf::Color(200, 200, 200);  // Màu xám
+            // Gradient không tìm thấy - dùng màu fallback xám
             fillStr = "gray";
         }
     }
 
+    // Vẽ solid color (nếu không phải gradient)
     std::vector<sf::Vector2f> pts;
-    pts.push_back({x, y});
-    pts.push_back({x + w, y});
-    pts.push_back({x + w, y + h});
-    pts.push_back({x, y + h});
+    pts.push_back({ x, y });
+    pts.push_back({ x + w, y });
+    pts.push_back({ x + w, y + h });
+    pts.push_back({ x, y + h });
 
-    for (auto &p : pts)
+    for (auto& p : pts)
     {
         float tx, ty;
         tm.transformPoint(p.x, p.y, tx, ty);
@@ -832,24 +936,25 @@ void SVGRenderer::renderRect(const Rect &r)
         p.y = ty;
     }
 
-    sf::Color f = stringToColor(a.count("fill") ? a["fill"] : "none", "fill");
+    sf::Color f = stringToColor(fillStr, "fill");
     if (f != sf::Color::Transparent)
     {
-        f.a = getOpacity(a, "fill-opacity") * 255;
-        drawConcaveShape(window, {pts}, f);
+        f.a = static_cast<std::uint8_t>(getOpacity(a, "fill-opacity") * 255);
+        drawConcaveShape(window, { pts }, f);
     }
+
     sf::Color st = stringToColor(a.count("stroke") ? a["stroke"] : "none", "stroke");
     if (st != sf::Color::Transparent)
-        st.a = getOpacity(a, "stroke-opacity") * 255;
+        st.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
     float th = 1.f;
     if (a.count("stroke-width"))
         try
-        {
-            th = std::stof(a["stroke-width"]);
-        }
-        catch (...)
-        {
-        };
+    {
+        th = std::stof(a["stroke-width"]);
+    }
+    catch (...)
+    {
+    };
     if (st.a > 0 && th > 0)
         drawSharpStroke(window, pts, th, st, true);
 }
@@ -904,7 +1009,6 @@ void SVGRenderer::renderText(const Text &t)
     textShape.setString(t.getContent());
     textShape.setCharacterSize(finalFontSize);
 
-    // [SỬA LỖI 1] Thay sf::Uint32 bằng std::uint32_t
     std::uint32_t style = sf::Text::Regular;
     if (attrs.count("font-weight") && (attrs["font-weight"] == "bold" || attrs["font-weight"] == "700"))
     {
@@ -916,7 +1020,7 @@ void SVGRenderer::renderText(const Text &t)
     }
     textShape.setStyle(style);
 
-    // 3. Màu sắc & Viền (Giữ nguyên logic cũ, đảm bảo dùng std::uint8_t)
+    // 3. Màu sắc & Viền
     std::string fillStr = attrs.count("fill") ? attrs["fill"] : "black";
     sf::Color fillColor = stringToColor(fillStr, "fill");
     if (fillColor != sf::Color::Transparent)
@@ -959,10 +1063,9 @@ void SVGRenderer::renderText(const Text &t)
     float finalX = static_cast<float>(t.getX() + t.getDx());
     float finalY = static_cast<float>(t.getY() + t.getDy());
 
-    // Fix baseline (đưa chân chữ về đúng vị trí)
     finalY -= finalFontSize;
 
-    // [SỬA LỖI 2] Cập nhật truy cập biến của sf::FloatRect cho SFML 3.0
+    // Cập nhật truy cập biến của sf::FloatRect cho SFML 3.0
     if (attrs.count("text-anchor"))
     {
         std::string anchor = attrs["text-anchor"];
@@ -1027,8 +1130,6 @@ void SVGRenderer::renderPolygon(const Polygon &p)
     {
         fillColor.a = static_cast<std::uint8_t>(getOpacity(a, "fill-opacity") * 255);
 
-        // [GIẢI PHÁP MỚI CHO NGÔI SAO]
-        // Nếu là ngôi sao 5 cánh (tự cắt), ta vẽ bằng TriangleFan
         // TriangleFan sẽ nối điểm đầu với tất cả các cặp điểm tiếp theo -> Tạo ra hình sao đặc
         if (localPts.size() == 5)
         {
@@ -1246,11 +1347,10 @@ void SVGRenderer::renderEllipse(const Ellipse &e)
 }
 
 // vẽ path
-void SVGRenderer::renderPath(const Path &path)
+void SVGRenderer::renderPath(const Path& path)
 {
-    const auto &commands = path.getCommands();
-    if (commands.empty())
-        return;
+    const auto& commands = path.getCommands();
+    if (commands.empty()) return;
 
     Attributes a = getEffectiveAttributes(path.getAttributes());
     TransformMatrix tm = getCumulativeTransform();
@@ -1261,38 +1361,48 @@ void SVGRenderer::renderPath(const Path &path)
     float avgScale = (scaleX + scaleY) / 2.0f;
 
     float w = 1.0f;
-    if (a.count("stroke-width"))
-    {
-        try
-        {
-            w = std::stof(a["stroke-width"]);
-        }
-        catch (...)
-        {
-        }
+    if (a.count("stroke-width")) {
+        try { w = std::stof(a["stroke-width"]); }
+        catch (...) {}
     }
-
     float finalStrokeWidth = w * avgScale;
 
-    sf::Color f = stringToColor(a.count("fill") ? a["fill"] : "black", "fill");
-    if (f != sf::Color::Transparent)
-    {
-        f.a = static_cast<std::uint8_t>(getOpacity(a, "fill-opacity") * 255);
+    // Fill & Stroke Colors
+    std::string fillStr = a.count("fill") ? a["fill"] : "black";
+    float fillOpacity = getOpacity(a, "fill-opacity");
+
+    bool hasGradientFill = false;
+    sf::Color fillColor = sf::Color::Transparent;
+
+    if (fillStr.find("url(#") != std::string::npos) {
+        size_t start = fillStr.find("#") + 1;
+        size_t end = fillStr.find(")");
+        std::string gradId = fillStr.substr(start, end - start);
+
+        auto it = gradients_.find(gradId);
+        if (it != gradients_.end()) {
+            hasGradientFill = true;
+        }
+        else {
+            fillColor = sf::Color(200, 200, 200);
+            fillColor.a = static_cast<std::uint8_t>(fillColor.a * fillOpacity);
+        }
+    }
+    else {
+        fillColor = stringToColor(fillStr, "fill");
+        if (fillColor != sf::Color::Transparent) {
+            fillColor.a = static_cast<std::uint8_t>(fillColor.a * fillOpacity);
+        }
     }
 
     sf::Color st = stringToColor(a.count("stroke") ? a["stroke"] : "none", "stroke");
-    if (st != sf::Color::Transparent)
-    {
+    if (st != sf::Color::Transparent) {
         st.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
     }
 
-    // --- Xử lý hình học ---
-    // subPaths: Dùng để TÔ MÀU (Cần clean điểm)
+    // Build geometry
     std::vector<std::vector<sf::Vector2f>> fillPaths;
-
-    // strokePaths: Dùng để VẼ VIỀN (Giữ nguyên gốc để không mất nét)
-    struct StrokePart
-    {
+    struct StrokePart {
         std::vector<sf::Vector2f> points;
         bool isClosed;
     };
@@ -1300,244 +1410,294 @@ void SVGRenderer::renderPath(const Path &path)
 
     std::vector<sf::Vector2f> curPts;
     sf::Vector2f curPos(0, 0), startPos(0, 0);
+    sf::Vector2f lastControlPoint(0, 0);
+    bool hadControlPoint = false;
     bool currentSubPathClosed = false;
 
-    auto addBezier = [&](sf::Vector2f p0, sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3)
-    {
+    auto addBezier = [&](sf::Vector2f p0, sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3) {
         float len = getLength(p1 - p0) + getLength(p2 - p1) + getLength(p3 - p2);
         int steps = static_cast<int>(len / 2.0f);
-        if (steps < 20)
-            steps = 20;
-        if (steps > 1000)
-            steps = 1000;
-
-        for (int i = 1; i <= steps; ++i)
-        {
+        if (steps < 20) steps = 20;
+        if (steps > 1000) steps = 1000;
+        for (int i = 1; i <= steps; ++i) {
             float t = i / (float)steps;
             curPts.push_back(cubicBezier(t, p0, p1, p2, p3));
         }
-    };
+        };
 
-    for (const auto &cmd : commands)
-    {
+    for (const auto& cmd : commands) {
         char t = cmd.type;
-        const auto &args = cmd.args;
+        const auto& args = cmd.args;
 
-        // Gặp lệnh Move (M/m) -> Kết thúc sub-path cũ
-        if ((t == 'M' || t == 'm') && !curPts.empty())
-        {
-            // 1. Lưu cho Fill (Clean điểm)
+        if ((t == 'M' || t == 'm') && !curPts.empty()) {
             std::vector<sf::Vector2f> cleaned = cleanPolygonPoints(curPts);
-            if (cleaned.size() >= 3)
-                fillPaths.push_back(cleaned);
-
-            // 2. Lưu cho Stroke (Nguyên gốc)
-            if (curPts.size() >= 2)
-                strokePaths.push_back({curPts, currentSubPathClosed});
-
+            if (cleaned.size() >= 3) fillPaths.push_back(cleaned);
+            if (curPts.size() >= 2) strokePaths.push_back({ curPts, currentSubPathClosed });
             curPts.clear();
             currentSubPathClosed = false;
+            hadControlPoint = false;
         }
 
-        if (t == 'M')
-        {
-            curPos = {args[0], args[1]};
+        if (t == 'M') {
+            curPos = { args[0], args[1] };
             startPos = curPos;
             curPts.push_back(curPos);
+            hadControlPoint = false;
         }
-        else if (t == 'm')
-        {
+        else if (t == 'm') {
             curPos += {args[0], args[1]};
             startPos = curPos;
             curPts.push_back(curPos);
+            hadControlPoint = false;
         }
-        else if (t == 'L')
-        {
-            curPos = {args[0], args[1]};
+        else if (t == 'L') {
+            curPos = { args[0], args[1] };
             curPts.push_back(curPos);
+            hadControlPoint = false;
         }
-        else if (t == 'l')
-        {
+        else if (t == 'l') {
             curPos += {args[0], args[1]};
             curPts.push_back(curPos);
+            hadControlPoint = false;
         }
-        else if (t == 'H')
-        {
+        else if (t == 'H') {
             curPos.x = args[0];
             curPts.push_back(curPos);
+            hadControlPoint = false;
         }
-        else if (t == 'h')
-        {
+        else if (t == 'h') {
             curPos.x += args[0];
             curPts.push_back(curPos);
+            hadControlPoint = false;
         }
-        else if (t == 'V')
-        {
+        else if (t == 'V') {
             curPos.y = args[0];
             curPts.push_back(curPos);
+            hadControlPoint = false;
         }
-        else if (t == 'v')
-        {
+        else if (t == 'v') {
             curPos.y += args[0];
             curPts.push_back(curPos);
+            hadControlPoint = false;
         }
-        else if (t == 'C')
-        {
-            sf::Vector2f p1(args[0], args[1]), p2(args[2], args[3]), p3(args[4], args[5]);
+        else if (t == 'C') {
+            sf::Vector2f p1(args[0], args[1]);
+            sf::Vector2f p2(args[2], args[3]);
+            sf::Vector2f p3(args[4], args[5]);
             addBezier(curPos, p1, p2, p3);
+            lastControlPoint = p2;
+            hadControlPoint = true;
             curPos = p3;
         }
-        else if (t == 'c')
-        {
+        else if (t == 'c') {
             sf::Vector2f p1 = curPos + sf::Vector2f(args[0], args[1]);
             sf::Vector2f p2 = curPos + sf::Vector2f(args[2], args[3]);
             sf::Vector2f p3 = curPos + sf::Vector2f(args[4], args[5]);
             addBezier(curPos, p1, p2, p3);
+            lastControlPoint = p2;
+            hadControlPoint = true;
             curPos = p3;
         }
-        else if (t == 'Z' || t == 'z')
-        {
-            if (!curPts.empty())
-            {
-                // Đóng path bằng cách nối về startPos
-                if (getLength(curPos - startPos) > 0.1f)
-                {
+        else if (t == 'S' || t == 's') {
+            sf::Vector2f p1;
+            if (hadControlPoint) {
+                // Phản chiếu điểm control cuối qua curPos
+                p1 = curPos + (curPos - lastControlPoint);
+            }
+            else {
+                // Không có control point trước -> dùng curPos
+                p1 = curPos;
+            }
+
+            sf::Vector2f p2 = (t == 'S')
+                ? sf::Vector2f(args[0], args[1])
+                : curPos + sf::Vector2f(args[0], args[1]);
+
+            sf::Vector2f p3 = (t == 'S')
+                ? sf::Vector2f(args[2], args[3])
+                : curPos + sf::Vector2f(args[2], args[3]);
+
+            addBezier(curPos, p1, p2, p3);
+            lastControlPoint = p2;
+            hadControlPoint = true;
+            curPos = p3;
+        }
+        else if (t == 'Q' || t == 'q') {
+            sf::Vector2f P0 = curPos;
+            sf::Vector2f P1 = (t == 'Q')
+                ? sf::Vector2f(args[0], args[1])
+                : curPos + sf::Vector2f(args[0], args[1]);
+            sf::Vector2f P2 = (t == 'Q')
+                ? sf::Vector2f(args[2], args[3])
+                : curPos + sf::Vector2f(args[2], args[3]);
+
+            sf::Vector2f C1 = P0 + (2.0f / 3.0f) * (P1 - P0);
+            sf::Vector2f C2 = P2 + (2.0f / 3.0f) * (P1 - P2);
+            addBezier(P0, C1, C2, P2);
+            lastControlPoint = P1;
+            hadControlPoint = true;
+            curPos = P2;
+        }
+        else if (t == 'Z' || t == 'z') {
+            if (!curPts.empty()) {
+                if (getLength(curPos - startPos) > 0.1f) {
                     curPts.push_back(startPos);
                     curPos = startPos;
                 }
                 currentSubPathClosed = true;
             }
-        }
-        else if (t == 'S' || t == 's')
-        {
-            sf::Vector2f p3 = (t == 'S') ? sf::Vector2f(args[2], args[3]) : curPos + sf::Vector2f(args[2], args[3]);
-            curPts.push_back(p3);
-            curPos = p3;
-        }
-        else if (t == 'Q' || t == 'q')
-        {
-            // Quadratic Bezier (P0, P1, P2) -> Cubic Bezier (P0, C1, C2, P2)
-            // C1 = P0 + 2/3 * (P1 - P0)
-            // C2 = P2 + 2/3 * (P1 - P2)
-
-            sf::Vector2f P0 = curPos;
-            sf::Vector2f P1 = (t == 'Q') ? sf::Vector2f(args[0], args[1]) : curPos + sf::Vector2f(args[0], args[1]);
-            sf::Vector2f P2 = (t == 'Q') ? sf::Vector2f(args[2], args[3]) : curPos + sf::Vector2f(args[2], args[3]);
-
-            sf::Vector2f C1 = P0 + (2.0f / 3.0f) * (P1 - P0);
-            sf::Vector2f C2 = P2 + (2.0f / 3.0f) * (P1 - P2);
-
-            addBezier(P0, C1, C2, P2); // Hàm này vẽ cubic bezier
-            curPos = P2;
+            hadControlPoint = false;
         }
     }
 
-    // Lưu subPath cuối cùng
-    if (!curPts.empty())
-    {
+    if (!curPts.empty()) {
         std::vector<sf::Vector2f> cleaned = cleanPolygonPoints(curPts);
-        if (cleaned.size() >= 3)
-            fillPaths.push_back(cleaned);
-        if (curPts.size() >= 2)
-            strokePaths.push_back({curPts, currentSubPathClosed});
+        if (cleaned.size() >= 3) fillPaths.push_back(cleaned);
+        if (curPts.size() >= 2) strokePaths.push_back({ curPts, currentSubPathClosed });
     }
 
-    // --- Transform tất cả điểm ---
-
-    // Transform Fill Paths
-    for (auto &path : fillPaths)
-    {
-        for (auto &p : path)
-        {
+    // Transform points
+    for (auto& path : fillPaths) {
+        for (auto& p : path) {
             float tx, ty;
             tm.transformPoint(p.x, p.y, tx, ty);
-            p.x = tx;
-            p.y = ty;
+            p.x = tx; p.y = ty;
         }
     }
 
-    // Transform Stroke Paths
-    for (auto &part : strokePaths)
-    {
-        for (auto &p : part.points)
-        {
+    for (auto& part : strokePaths) {
+        for (auto& p : part.points) {
             float tx, ty;
             tm.transformPoint(p.x, p.y, tx, ty);
-            p.x = tx;
-            p.y = ty;
+            p.x = tx; p.y = ty;
         }
     }
 
-    // --- 1. VẼ TÔ MÀU (Fill) ---
-    // Dùng fillPaths đã được clean -> Fix lỗi mất màu xanh
-    if (f != sf::Color::Transparent && !fillPaths.empty())
-    {
-        struct ShapeGroup
-        {
+    // Render Gradient Fill
+    if (hasGradientFill && !fillPaths.empty()) {
+        size_t start = fillStr.find("#") + 1;
+        size_t end = fillStr.find(")");
+        std::string gradId = fillStr.substr(start, end - start);
+
+        auto it = gradients_.find(gradId);
+        if (it != gradients_.end()) {
+            const Gradient& grad = it->second;
+
+            sf::FloatRect bbox;
+            bool first = true;
+            for (const auto& pathPts : fillPaths) {
+                for (const auto& pt : pathPts) {
+                    if (first) {
+                        bbox = sf::FloatRect({ pt.x, pt.y }, { 0.f, 0.f });
+                        first = false;
+                    }
+                    else {
+                        if (pt.x < bbox.position.x) {
+                            bbox.size.x += bbox.position.x - pt.x;
+                            bbox.position.x = pt.x;
+                        }
+                        if (pt.y < bbox.position.y) {
+                            bbox.size.y += bbox.position.y - pt.y;
+                            bbox.position.y = pt.y;
+                        }
+                        if (pt.x > bbox.position.x + bbox.size.x) {
+                            bbox.size.x = pt.x - bbox.position.x;
+                        }
+                        if (pt.y > bbox.position.y + bbox.size.y) {
+                            bbox.size.y = pt.y - bbox.position.y;
+                        }
+                    }
+                }
+            }
+
+            sf::VertexArray vertices(sf::PrimitiveType::Triangles);
+
+            for (const auto& pathPts : fillPaths) {
+                if (pathPts.size() < 3) continue;
+
+                using Point = std::array<double, 2>;
+                std::vector<std::vector<Point>> polygon;
+                std::vector<Point> ring;
+
+                for (const auto& p : pathPts) {
+                    ring.push_back({ (double)p.x, (double)p.y });
+                }
+
+                if (ring.size() >= 3) {
+                    polygon.push_back(ring);
+                    std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+
+                    for (size_t i = 0; i < indices.size(); i += 3) {
+                        for (int j = 0; j < 3; j++) {
+                            uint32_t idx = indices[i + j];
+                            if (idx < pathPts.size()) {
+                                sf::Vector2f pt = pathPts[idx];
+                                sf::Color color = (grad.type == "linear")
+                                    ? grad.getLinearColorAt(pt.x, pt.y, bbox)
+                                    : grad.getRadialColorAt(pt.x, pt.y, bbox);
+                                color.a = static_cast<std::uint8_t>(color.a * fillOpacity);
+                                vertices.append(sf::Vertex(pt, color));
+                            }
+                        }
+                    }
+                }
+            }
+
+            window.draw(vertices);
+        }
+    }
+    // Render Solid Fill
+    else if (fillColor != sf::Color::Transparent && !fillPaths.empty()) {
+        struct ShapeGroup {
             std::vector<sf::Vector2f> outer;
             std::vector<std::vector<sf::Vector2f>> holes;
         };
         std::vector<ShapeGroup> groups;
 
-        auto getCentroid = [](const std::vector<sf::Vector2f> &pts)
-        {
+        auto getCentroid = [](const std::vector<sf::Vector2f>& pts) {
             sf::Vector2f sum(0, 0);
-            for (const auto &p : pts)
-                sum += p;
+            for (const auto& p : pts) sum += p;
             return pts.empty() ? sf::Vector2f(0, 0) : sum / static_cast<float>(pts.size());
-        };
+            };
 
-        // Sort diện tích lớn -> nhỏ
-        std::sort(fillPaths.begin(), fillPaths.end(), [](const auto &a, const auto &b)
-                  { return getArea(a) > getArea(b); });
+        std::sort(fillPaths.begin(), fillPaths.end(),
+            [](const auto& a, const auto& b) { return getArea(a) > getArea(b); });
 
-        for (const auto &poly : fillPaths)
-        {
-            if (poly.size() < 3)
-                continue;
+        for (const auto& poly : fillPaths) {
+            if (poly.size() < 3) continue;
             bool added = false;
             sf::Vector2f center = getCentroid(poly);
 
-            for (auto &g : groups)
-            {
-                if (isPointInPolygon(center, g.outer))
-                {
+            for (auto& g : groups) {
+                if (isPointInPolygon(center, g.outer)) {
                     bool insideHole = false;
-                    for (const auto &hole : g.holes)
-                    {
-                        if (isPointInPolygon(center, hole))
-                        {
+                    for (const auto& hole : g.holes) {
+                        if (isPointInPolygon(center, hole)) {
                             insideHole = true;
                             break;
                         }
                     }
-                    if (!insideHole)
-                    {
+                    if (!insideHole) {
                         g.holes.push_back(poly);
                         added = true;
                     }
                     break;
                 }
             }
-            if (!added)
-                groups.push_back({poly, {}});
+            if (!added) groups.push_back({ poly, {} });
         }
 
-        for (const auto &g : groups)
-        {
+        for (const auto& g : groups) {
             std::vector<std::vector<sf::Vector2f>> inp;
             inp.push_back(g.outer);
-            for (const auto &h : g.holes)
-                inp.push_back(h);
-            drawConcaveShape(window, inp, f);
+            for (const auto& h : g.holes) inp.push_back(h);
+            drawConcaveShape(window, inp, fillColor);
         }
     }
 
-    // --- 2. VẼ VIỀN (Stroke) ---
-    if (st != sf::Color::Transparent && finalStrokeWidth > 0)
-    {
-        for (const auto &part : strokePaths)
-        {
+    // Render Stroke
+    if (st != sf::Color::Transparent && finalStrokeWidth > 0) {
+        for (const auto& part : strokePaths) {
             drawSharpStroke(window, part.points, finalStrokeWidth, st, part.isClosed);
         }
     }

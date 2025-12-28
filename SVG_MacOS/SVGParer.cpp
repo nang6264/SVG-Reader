@@ -46,6 +46,128 @@ static inline std::string trim(const std::string& s)
     return (wsback <= wsfront ? std::string() : std::string(wsfront, wsback));
 }
 
+GradientTransform parseGradientTransform(const std::string& transformStr) {
+    GradientTransform result;  // Identity matrix
+
+    if (transformStr.empty()) {
+        return result;
+    }
+
+    std::string str = transformStr;
+    size_t pos = 0;
+
+    // Helper: extract numbers from string
+    auto extractNumbers = [](const std::string& content) {
+        std::vector<float> values;
+        std::string clean = content;
+
+        // Replace commas with spaces
+        std::replace(clean.begin(), clean.end(), ',', ' ');
+
+        std::stringstream ss(clean);
+        float val;
+        while (ss >> val) {
+            values.push_back(val);
+        }
+        return values;
+        };
+
+    while (pos < str.length()) {
+        // Find opening parenthesis
+        size_t openParen = str.find('(', pos);
+        if (openParen == std::string::npos) break;
+
+        // Find closing parenthesis
+        size_t closeParen = str.find(')', openParen);
+        if (closeParen == std::string::npos) break;
+
+        // Extract command name
+        std::string command = trim(str.substr(pos, openParen - pos));
+
+        // Remove leading comma if present
+        if (!command.empty() && command[0] == ',') {
+            command = trim(command.substr(1));
+        }
+
+        // Extract parameters
+        std::string content = str.substr(openParen + 1, closeParen - openParen - 1);
+        std::vector<float> values = extractNumbers(content);
+
+        // Build transform matrix
+        GradientTransform current;
+
+        if (command == "matrix" && values.size() == 6) {
+            // matrix(a, b, c, d, e, f)
+            current = GradientTransform(values[0], values[1], values[2],
+                values[3], values[4], values[5]);
+        }
+        else if (command == "translate") {
+            if (values.size() == 1) {
+                current = GradientTransform(1, 0, 0, 1, values[0], 0);
+            }
+            else if (values.size() >= 2) {
+                current = GradientTransform(1, 0, 0, 1, values[0], values[1]);
+            }
+        }
+        else if (command == "scale") {
+            if (values.size() == 1) {
+                current = GradientTransform(values[0], 0, 0, values[0], 0, 0);
+            }
+            else if (values.size() >= 2) {
+                current = GradientTransform(values[0], 0, 0, values[1], 0, 0);
+            }
+        }
+        else if (command == "rotate") {
+            if (values.size() >= 1) {
+                float angle = values[0] * M_PI / 180.0f;  // degrees to radians
+                float cosA = std::cos(angle);
+                float sinA = std::sin(angle);
+
+                if (values.size() == 1) {
+                    // rotate(angle)
+                    current = GradientTransform(cosA, sinA, -sinA, cosA, 0, 0);
+                }
+                else if (values.size() >= 3) {
+                    // rotate(angle, cx, cy)
+                    float cx = values[1];
+                    float cy = values[2];
+
+                    current.a = cosA;
+                    current.b = sinA;
+                    current.c = -sinA;
+                    current.d = cosA;
+                    current.e = cx - cosA * cx + sinA * cy;
+                    current.f = cy - sinA * cx - cosA * cy;
+                }
+            }
+        }
+        else if (command == "skewX" && values.size() >= 1) {
+            float angle = values[0] * M_PI / 180.0f;
+            float tanA = std::tan(angle);
+            current = GradientTransform(1, 0, tanA, 1, 0, 0);
+        }
+        else if (command == "skewY" && values.size() >= 1) {
+            float angle = values[0] * M_PI / 180.0f;
+            float tanA = std::tan(angle);
+            current = GradientTransform(1, tanA, 0, 1, 0, 0);
+        }
+
+        // Multiply matrices: result = result * current
+        GradientTransform temp;
+        temp.a = result.a * current.a + result.c * current.b;
+        temp.b = result.b * current.a + result.d * current.b;
+        temp.c = result.a * current.c + result.c * current.d;
+        temp.d = result.b * current.c + result.d * current.d;
+        temp.e = result.a * current.e + result.c * current.f + result.e;
+        temp.f = result.b * current.e + result.d * current.f + result.f;
+        result = temp;
+
+        pos = closeParen + 1;
+    }
+
+    return result;
+}
+
 Gradient SVGParser::parseGradient(std::ifstream& file, const std::string& tagName,
     const Attributes& attributes)
 {
@@ -74,9 +196,8 @@ Gradient SVGParser::parseGradient(std::ifstream& file, const std::string& tagNam
         }
     }
 
-    // 
     if (attributes.count("gradientTransform")) {
-        // TODO: Parse transform nếu cần (tùy chọn)
+        grad.transform = parseGradientTransform(attributes.at("gradientTransform"));
     }
 
     auto parseValue = [](const std::string& val) -> float {
