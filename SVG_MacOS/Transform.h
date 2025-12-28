@@ -32,7 +32,7 @@ public:
     static TransformMatrix scale(float s);
 
     void transformPoint(float x, float y, float& outX, float& outY) const;
-
+    friend class SVGParser;
 
     static TransformMatrix parse(const std::string& transformString);
 

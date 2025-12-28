@@ -17,8 +17,108 @@
 #define M_PI 3.14159265358979323846f
 #endif
 
-void SVGRenderer::setGradients(const std::map<std::string, Gradient>& gradients) {
+static inline std::string trimString(const std::string &s)
+{
+    auto wsfront = std::find_if_not(s.begin(), s.end(), [](int c)
+                                    { return std::isspace(c); });
+    auto wsback = std::find_if_not(s.rbegin(), s.rend(), [](int c)
+                                   { return std::isspace(c); })
+                      .base();
+    return (wsback <= wsfront ? std::string() : std::string(wsfront, wsback));
+}
+
+void SVGRenderer::setGradients(const std::map<std::string, Gradient> &gradients)
+{
     gradients_ = gradients;
+}
+
+// --- ARC MATH HELPER ---
+// Hàm bổ trợ: Chuyển đổi cung Ellipse SVG (Endpoint parametrization) -> Danh sách điểm
+// Hàm bổ trợ tính toán điểm cho cung tròn (Arc)
+void addArc(std::vector<sf::Vector2f> &points, sf::Vector2f currentPos,
+            float rx, float ry, float xAxisRotation,
+            bool largeArcFlag, bool sweepFlag, float x, float y)
+{
+    if (rx == 0 || ry == 0)
+    {
+        points.push_back({x, y});
+        return;
+    }
+
+    // 1. Chuẩn hóa góc và bán kính
+    float phi = xAxisRotation * (M_PI / 180.0f);
+    rx = std::abs(rx);
+    ry = std::abs(ry);
+
+    // 2. Tính toán ma trận chuyển đổi
+    float dx2 = (currentPos.x - x) / 2.0f;
+    float dy2 = (currentPos.y - y) / 2.0f;
+    float x1p = std::cos(phi) * dx2 + std::sin(phi) * dy2;
+    float y1p = -std::sin(phi) * dx2 + std::cos(phi) * dy2;
+
+    // Check radii correction
+    float radiiCheck = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+    if (radiiCheck > 1.0f)
+    {
+        float sqrtCheck = std::sqrt(radiiCheck);
+        rx *= sqrtCheck;
+        ry *= sqrtCheck;
+    }
+
+    // 3. Tính tâm ellipse
+    float rx_sq = rx * rx;
+    float ry_sq = ry * ry;
+    float x1p_sq = x1p * x1p;
+    float y1p_sq = y1p * y1p;
+
+    float sign = (largeArcFlag == sweepFlag) ? -1.0f : 1.0f;
+    float sq = (rx_sq * ry_sq - rx_sq * y1p_sq - ry_sq * x1p_sq) / (rx_sq * y1p_sq + ry_sq * x1p_sq);
+    if (sq < 0)
+        sq = 0;
+    float coef = sign * std::sqrt(sq);
+
+    float cxp = coef * ((rx * y1p) / ry);
+    float cyp = coef * (-(ry * x1p) / rx);
+
+    float cx = std::cos(phi) * cxp - std::sin(phi) * cyp + (currentPos.x + x) / 2.0f;
+    float cy = std::sin(phi) * cxp + std::cos(phi) * cyp + (currentPos.y + y) / 2.0f;
+
+    // 4. Tính góc
+    auto angle = [&](float ux, float uy, float vx, float vy)
+    {
+        float dot = ux * vx + uy * vy;
+        float len = std::sqrt(ux * ux + uy * uy) * std::sqrt(vx * vx + vy * vy);
+        float ang = std::acos(std::max(-1.0f, std::min(1.0f, dot / len)));
+        if ((ux * vy - uy * vx) < 0)
+            ang = -ang;
+        return ang;
+    };
+
+    float theta1 = angle(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    float dtheta = angle((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+
+    if (!sweepFlag && dtheta > 0)
+        dtheta -= 2 * M_PI;
+    else if (sweepFlag && dtheta < 0)
+        dtheta += 2 * M_PI;
+
+    // 5. Sampling (Chia nhỏ cung thành điểm)
+    int segments = static_cast<int>(std::abs(dtheta) * std::max(rx, ry));
+    if (segments < 20)
+        segments = 20; // Đảm bảo độ mịn tối thiểu
+
+    for (int i = 0; i <= segments; ++i)
+    {
+        float t = i / (float)segments;
+        float currentTheta = theta1 + t * dtheta;
+        float px = rx * std::cos(currentTheta);
+        float py = ry * std::sin(currentTheta);
+
+        float finalX = std::cos(phi) * px - std::sin(phi) * py + cx;
+        float finalY = std::sin(phi) * px + std::cos(phi) * py + cy;
+
+        points.push_back({finalX, finalY});
+    }
 }
 
 // --- Math Helpers ---
@@ -118,6 +218,7 @@ void drawConcaveShape(sf::RenderWindow &window, const std::vector<std::vector<sf
     for (uint32_t index : indices)
     {
         if (index < flatPoints.size())
+            // [ĐÃ SỬA]: SFML 3.0 aggregate init
             vertices.append(sf::Vertex{flatPoints[index], color});
     }
     window.draw(vertices);
@@ -163,7 +264,6 @@ std::pair<bool, sf::Color> SVGRenderer::resolveColor(const std::string &fillStr,
             else
             {
                 // KHÔNG TÌM THẤY -> Fallback
-                // std::cerr << "Warning: Gradient ID #" << id << " not found!\n";
                 return {false, sf::Color::Black};
             }
         }
@@ -200,12 +300,6 @@ std::vector<sf::Vector2f> fixStarPolygon(const std::vector<sf::Vector2f> &pts)
         newPts.push_back(pts[curr]);
 
         // 2. Tính toán điểm lõm (Armpit) - Giao điểm của các cạnh đối diện
-        // Logic: Điểm lõm giữa Tip A và Tip C là giao điểm của cạnh AB (0-1) và CD (2-3)
-        // Mapping:
-        // i=0 (A->C): Giao của Edge(0,1) và Edge(2,3)
-        // i=1 (C->E): Giao của Edge(2,3) và Edge(4,0)
-        // ...
-
         sf::Vector2f p1 = pts[curr];           // Start of Edge 1
         sf::Vector2f p2 = pts[(curr + 1) % 5]; // End of Edge 1
 
@@ -266,6 +360,7 @@ void drawSharpStroke(sf::RenderWindow &window, const std::vector<sf::Vector2f> &
         if (miterLen > thickness * 5.0f)
             miterLen = thickness * 5.0f;
 
+        // [ĐÃ SỬA]: SFML 3.0 aggregate init
         strip.append(sf::Vertex{cur + miter * miterLen, color});
         strip.append(sf::Vertex{cur - miter * miterLen, color});
     }
@@ -331,7 +426,8 @@ SVGRenderer::SVGRenderer(unsigned int width, unsigned int height) : helpMenuText
 {
     sf::ContextSettings settings;
     settings.antiAliasingLevel = 8;
-    window.create(sf::VideoMode({1200, 800}), "SVG Renderer", sf::Style::Default, sf::State::Windowed, settings);
+    // [ĐÃ SỬA]: Dùng tham số width, height thay vì hardcode
+    window.create(sf::VideoMode({width, height}), "SVG Renderer", sf::Style::Default, sf::State::Windowed, settings);
     view = window.getDefaultView();
     if (!font.openFromFile("times.ttf"))
     {
@@ -460,6 +556,7 @@ float getOpacity(const std::map<std::string, std::string> &attrs, std::string ke
 }
 
 // Hàm loại bỏ các điểm trùng nhau liên tiếp để tránh lỗi Earcut
+// Hàm loại bỏ điểm trùng lặp (đã chỉnh epsilon xuống cực nhỏ)
 std::vector<sf::Vector2f> cleanPolygonPoints(const std::vector<sf::Vector2f> &points)
 {
     if (points.empty())
@@ -470,19 +567,15 @@ std::vector<sf::Vector2f> cleanPolygonPoints(const std::vector<sf::Vector2f> &po
 
     for (size_t i = 1; i < points.size(); ++i)
     {
-        // Chỉ thêm điểm nếu nó khác điểm liền trước (khoảng cách > epsilon)
-        if (getLength(points[i] - cleaned.back()) > 0.01f)
+        // Chỉ loại bỏ nếu điểm TRÙNG KHÍT (khoảng cách < 0.0001)
+        // Logo Firefox có nhiều điểm rất gần nhau, nếu xoá bừa sẽ bị hở hình
+        if (getLength(points[i] - cleaned.back()) > 0.0001f)
         {
             cleaned.push_back(points[i]);
         }
     }
 
-    // Nếu điểm cuối trùng điểm đầu, cũng nên bỏ (để Earcut tự xử lý khép kín)
-    if (cleaned.size() > 2 && getLength(cleaned.back() - cleaned.front()) < 0.01f)
-    {
-        cleaned.pop_back();
-    }
-
+    // Lưu ý: Không tự động xoá điểm cuối trùng đầu ở đây để Earcut tự xử lý
     return cleaned;
 }
 
@@ -495,22 +588,9 @@ sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type)
 
     if (s == "none" || s == "transparent" || s.empty())
         return sf::Color::Transparent;
-
-    // --- XỬ LÝ URL (GRADIENT GIẢ LẬP) ---
     if (s.find("url(") != std::string::npos)
-    {
-        if (type == "fill")
-        {
-            if (s.find("fill1") != std::string::npos)
-                return sf::Color(184, 146, 0);
-            if (s.find("fill0") != std::string::npos)
-                return sf::Color(255, 198, 0);
-            return sf::Color(255, 192, 0);
-        }
         return sf::Color::Black;
-    }
 
-    // --- XỬ LÝ RGB ---
     if (s.rfind("rgb(", 0) == 0 && s.back() == ')')
     {
         std::string content = s.substr(4, s.length() - 5);
@@ -536,55 +616,16 @@ sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type)
         }
     }
 
-    // --- DANH SÁCH MÀU MỞ RỘNG (Đầy đủ hơn) ---
     static const std::map<std::string, sf::Color> colors = {
-        // Màu cơ bản
-        {"black", sf::Color::Black},
-        {"white", sf::Color::White},
-        {"red", sf::Color::Red},
-        {"lime", sf::Color::Green},
-        {"blue", sf::Color::Blue},
-        {"yellow", sf::Color::Yellow},
-        {"cyan", sf::Color::Cyan},
-        {"magenta", sf::Color::Magenta},
-        {"gray", sf::Color(128, 128, 128)},
-        {"grey", sf::Color(128, 128, 128)},
-        {"orange", sf::Color(255, 165, 0)},
-        {"purple", sf::Color(128, 0, 128)},
-        {"green", sf::Color(0, 128, 0)},
-        {"skyblue", sf::Color(135, 206, 235)},
-        {"lightskyblue", sf::Color(135, 206, 250)},
-        {"deepskyblue", sf::Color(0, 191, 255)},
-        {"dodgerblue", sf::Color(30, 144, 255)},
-        {"steelblue", sf::Color(70, 130, 180)},
-        {"royal blue", sf::Color(65, 105, 225)},
-
-        {"darkslategray", sf::Color(47, 79, 79)},
-        {"navy", sf::Color(0, 0, 128)},
-        {"midnightblue", sf::Color(25, 25, 112)},
-        {"darkmagenta", sf::Color(139, 0, 139)},
-        {"blueviolet", sf::Color(138, 43, 226)},
-        {"indigo", sf::Color(75, 0, 130)},
-
-        {"gold", sf::Color(255, 215, 0)},
-        {"brown", sf::Color(165, 42, 42)},
-        {"pink", sf::Color(255, 192, 203)},
-        {"hotpink", sf::Color(255, 105, 180)},
-        {"silver", sf::Color(192, 192, 192)},
-        {"teal", sf::Color(0, 128, 128)},
-        {"olive", sf::Color(128, 128, 0)},
-        {"maroon", sf::Color(128, 0, 0)},
-        {"#fd5", sf::Color(255, 221, 85)},
-        {"#60f", sf::Color(102, 0, 255)},
-        {"#ff543e", sf::Color(255, 84, 62)},
-        {"#c837ab", sf::Color(200, 55, 171)},
-        {"#3771c8", sf::Color(55, 113, 200)},
+        {"black", sf::Color::Black}, {"white", sf::Color::White}, {"red", sf::Color::Red}, {"lime", sf::Color::Green}, {"blue", sf::Color::Blue}, {"yellow", sf::Color::Yellow}, {"cyan", sf::Color::Cyan}, {"magenta", sf::Color::Magenta}, {"gray", sf::Color(128, 128, 128)}, {"orange", sf::Color(255, 165, 0)}, {"purple", sf::Color(128, 0, 128)}, {"green", sf::Color(0, 128, 0)}, {"#3bb553", sf::Color(59, 181, 83)}, // Chrome Green
+        {"#ea4335", sf::Color(234, 67, 53)},                                                                                                                                                                                                                                                                                                                                                                                   // Chrome Red
+        {"#fbbc05", sf::Color(251, 188, 5)},                                                                                                                                                                                                                                                                                                                                                                                   // Chrome Yellow
+        {"#4285f4", sf::Color(66, 133, 244)}                                                                                                                                                                                                                                                                                                                                                                                   // Chrome Blue
     };
 
     if (colors.count(s))
         return colors.at(s);
 
-    // --- XỬ LÝ HEX ---
     if (s[0] == '#')
     {
         s.erase(0, 1);
@@ -609,35 +650,47 @@ sf::Color SVGRenderer::stringToColor(std::string colorStr, std::string type)
             return sf::Color((hex >> 16) & 0xFF, (hex >> 8) & 0xFF, hex & 0xFF);
         }
     }
-
-    // Nếu vẫn không tìm thấy màu, trả về Đen cho Fill
     if (type == "fill")
         return sf::Color::Black;
     return sf::Color::Transparent;
 }
 
-// Lấy thuộc tính hiệu quả (kế thừa + cục bộ + style)
+// Hàm lấy thuộc tính có hiệu lực (Xử lý cả Style)
 Attributes SVGRenderer::getEffectiveAttributes(const Attributes &localAttrs) const
 {
     Attributes e;
+    // 1. Kế thừa từ cha
     if (!renderStack_.empty())
         e = renderStack_.back().inheritedAttributes;
+
+    // 2. Ghi đè bằng thuộc tính cục bộ
     for (auto &k : localAttrs)
         e[k.first] = k.second;
+
+    // 3. Bóc tách chuỗi 'style' (để đọc fill:url(#b) của Chrome)
     if (e.count("style"))
     {
-        std::stringstream ss(e["style"]);
-        std::string s;
-        while (std::getline(ss, s, ';'))
+        std::string styleStr = e["style"];
+        std::stringstream ss(styleStr);
+        std::string segment; // [SỬA LỖI] Đổi tên biến thành 'segment' cho rõ ràng
+
+        while (std::getline(ss, segment, ';'))
         {
-            size_t p = s.find(':');
+            size_t p = segment.find(':');
             if (p != std::string::npos)
             {
-                std::string k = s.substr(0, p), v = s.substr(p + 1);
+                std::string k = segment.substr(0, p);
+                std::string v = segment.substr(p + 1);
+
+                // Xóa khoảng trắng thừa
                 k.erase(0, k.find_first_not_of(" \t"));
-                k.erase(k.find_last_not_of(" \t") + 1);
+                if (k.find_last_not_of(" \t") != std::string::npos)
+                    k.erase(k.find_last_not_of(" \t") + 1);
+
                 v.erase(0, v.find_first_not_of(" \t"));
-                v.erase(v.find_last_not_of(" \t") + 1);
+                if (v.find_last_not_of(" \t") != std::string::npos)
+                    v.erase(v.find_last_not_of(" \t") + 1);
+
                 if (!k.empty())
                     e[k] = v;
             }
@@ -649,7 +702,7 @@ Attributes SVGRenderer::getEffectiveAttributes(const Attributes &localAttrs) con
 // --- Basic Renderers ---
 
 // renderCircle với Multi-Stop Support
-void SVGRenderer::renderCircle(const Circle& c)
+void SVGRenderer::renderCircle(const Circle &c)
 {
     Attributes attrs = getEffectiveAttributes(c.getAttributes());
     float opacity = getOpacity(attrs, "fill-opacity");
@@ -667,30 +720,34 @@ void SVGRenderer::renderCircle(const Circle& c)
     bool gradientDrawn = false;
 
     // Xử lý Gradient (Linear và Radial)
-    if (isGradient) {
+    if (isGradient)
+    {
         size_t start = fillStr.find("#") + 1;
         size_t end = fillStr.find(")");
         std::string id = fillStr.substr(start, end - start);
 
         auto it = gradients_.find(id);
-        if (it != gradients_.end()) {
-            const Gradient& grad = it->second;
+        if (it != gradients_.end())
+        {
+            const Gradient &grad = it->second;
 
             float cx = static_cast<float>(c.getCx());
             float cy = static_cast<float>(c.getCy());
             float r = static_cast<float>(c.getR());
 
-            const int segments = 64;  // Số cạnh hình tròn
-            const int rings = 20;     // Số vòng tròn đồng tâm
+            const int segments = 64; // Số cạnh hình tròn
+            const int rings = 20;    // Số vòng tròn đồng tâm
 
             // Tính bounding box cho Linear Gradient
-            sf::FloatRect bbox({ cx - r, cy - r }, { 2.0f * r, 2.0f * r });
+            sf::FloatRect bbox({cx - r, cy - r}, {2.0f * r, 2.0f * r});
 
             sf::VertexArray vertices(sf::PrimitiveType::Triangles);
 
             // RADIAL GRADIENT
-            if (grad.type == "radial") {
-                for (int ring = 0; ring < rings; ring++) {
+            if (grad.type == "radial")
+            {
+                for (int ring = 0; ring < rings; ring++)
+                {
                     float innerRadius = (ring / (float)rings) * r;
                     float outerRadius = ((ring + 1) / (float)rings) * r;
 
@@ -706,7 +763,8 @@ void SVGRenderer::renderCircle(const Circle& c)
 
                     float angleStep = 2.0f * M_PI / segments;
 
-                    for (int i = 0; i < segments; i++) {
+                    for (int i = 0; i < segments; i++)
+                    {
                         float angle1 = i * angleStep;
                         float angle2 = (i + 1) * angleStep;
 
@@ -723,14 +781,14 @@ void SVGRenderer::renderCircle(const Circle& c)
                         float oy2 = cy + std::sin(angle2) * outerRadius;
 
                         // Triangle 1
-                        vertices.append(sf::Vertex(sf::Vector2f(ix1, iy1), innerColor));
-                        vertices.append(sf::Vertex(sf::Vector2f(ox1, oy1), outerColor));
-                        vertices.append(sf::Vertex(sf::Vector2f(ix2, iy2), innerColor));
+                        vertices.append(sf::Vertex{sf::Vector2f(ix1, iy1), innerColor});
+                        vertices.append(sf::Vertex{sf::Vector2f(ox1, oy1), outerColor});
+                        vertices.append(sf::Vertex{sf::Vector2f(ix2, iy2), innerColor});
 
                         // Triangle 2
-                        vertices.append(sf::Vertex(sf::Vector2f(ix2, iy2), innerColor));
-                        vertices.append(sf::Vertex(sf::Vector2f(ox1, oy1), outerColor));
-                        vertices.append(sf::Vertex(sf::Vector2f(ox2, oy2), outerColor));
+                        vertices.append(sf::Vertex{sf::Vector2f(ix2, iy2), innerColor});
+                        vertices.append(sf::Vertex{sf::Vector2f(ox1, oy1), outerColor});
+                        vertices.append(sf::Vertex{sf::Vector2f(ox2, oy2), outerColor});
                     }
                 }
 
@@ -738,14 +796,17 @@ void SVGRenderer::renderCircle(const Circle& c)
                 gradientDrawn = true;
             }
             // LINEAR GRADIENT
-            else if (grad.type == "linear") {
-                for (int ring = 0; ring < rings; ring++) {
+            else if (grad.type == "linear")
+            {
+                for (int ring = 0; ring < rings; ring++)
+                {
                     float innerRadius = (ring / (float)rings) * r;
                     float outerRadius = ((ring + 1) / (float)rings) * r;
 
                     float angleStep = 2.0f * M_PI / segments;
 
-                    for (int i = 0; i < segments; i++) {
+                    for (int i = 0; i < segments; i++)
+                    {
                         float angle1 = i * angleStep;
                         float angle2 = (i + 1) * angleStep;
 
@@ -773,14 +834,14 @@ void SVGRenderer::renderCircle(const Circle& c)
                         c4.a = static_cast<std::uint8_t>(c4.a * opacity);
 
                         // Triangle 1
-                        vertices.append(sf::Vertex(sf::Vector2f(ix1, iy1), c1));
-                        vertices.append(sf::Vertex(sf::Vector2f(ox1, oy1), c3));
-                        vertices.append(sf::Vertex(sf::Vector2f(ix2, iy2), c2));
+                        vertices.append(sf::Vertex{sf::Vector2f(ix1, iy1), c1});
+                        vertices.append(sf::Vertex{sf::Vector2f(ox1, oy1), c3});
+                        vertices.append(sf::Vertex{sf::Vector2f(ix2, iy2), c2});
 
                         // Triangle 2
-                        vertices.append(sf::Vertex(sf::Vector2f(ix2, iy2), c2));
-                        vertices.append(sf::Vertex(sf::Vector2f(ox1, oy1), c3));
-                        vertices.append(sf::Vertex(sf::Vector2f(ox2, oy2), c4));
+                        vertices.append(sf::Vertex{sf::Vector2f(ix2, iy2), c2});
+                        vertices.append(sf::Vertex{sf::Vector2f(ox1, oy1), c3});
+                        vertices.append(sf::Vertex{sf::Vector2f(ox2, oy2), c4});
                     }
                 }
 
@@ -793,42 +854,51 @@ void SVGRenderer::renderCircle(const Circle& c)
     // Vẽ CircleShape cho stroke và fallback
     float r = static_cast<float>(c.getR());
     sf::CircleShape s(r);
-    s.setOrigin({ r, r });
-    s.setPosition({ static_cast<float>(c.getCx()), static_cast<float>(c.getCy()) });
+    s.setOrigin({r, r});
+    s.setPosition({static_cast<float>(c.getCx()), static_cast<float>(c.getCy())});
     s.setPointCount(100);
 
-    if (gradientDrawn) {
+    if (gradientDrawn)
+    {
         s.setFillColor(sf::Color::Transparent);
     }
-    else {
+    else
+    {
         s.setFillColor(solidColor);
     }
 
     // Xử lý stroke
     bool hasStroke = false;
     std::string strokeStr = attrs.count("stroke") ? attrs["stroke"] : "none";
-    if (strokeStr != "none") {
+    if (strokeStr != "none")
+    {
         sf::Color st = stringToColor(strokeStr, "stroke");
-        if (st != sf::Color::Transparent) {
+        if (st != sf::Color::Transparent)
+        {
             hasStroke = true;
             st.a = static_cast<std::uint8_t>(getOpacity(attrs, "stroke-opacity") * 255);
             s.setOutlineColor(st);
             float w = 1.0f;
             if (attrs.count("stroke-width"))
-                try { w = std::stof(attrs["stroke-width"]); }
-            catch (...) {}
+                try
+                {
+                    w = std::stof(attrs["stroke-width"]);
+                }
+                catch (...)
+                {
+                }
             s.setOutlineThickness(w);
         }
     }
 
-    if (!gradientDrawn || hasStroke) {
+    if (!gradientDrawn || hasStroke)
+    {
         window.draw(s, states);
     }
 }
 
-
 // vẽ hình chữ nhật
-void SVGRenderer::renderRect(const Rect& r)
+void SVGRenderer::renderRect(const Rect &r)
 {
     // Lấy transform
     Attributes a = getEffectiveAttributes(r.getAttributes());
@@ -843,71 +913,93 @@ void SVGRenderer::renderRect(const Rect& r)
     float fillOpacity = getOpacity(a, "fill-opacity");
 
     // Check gradient và gọi hàm render gradient
-    if (fillStr.find("url(#") != std::string::npos) {
+    if (fillStr.find("url(#") != std::string::npos)
+    {
         size_t start = fillStr.find("#") + 1;
         size_t end = fillStr.find(")");
         std::string gradId = fillStr.substr(start, end - start);
 
         auto it = gradients_.find(gradId);
-        if (it != gradients_.end()) {
-            const Gradient& grad = it->second;
+        if (it != gradients_.end())
+        {
+            const Gradient &grad = it->second;
 
             // Vẽ Linear Gradient
-            if (grad.type == "linear") {
+            if (grad.type == "linear")
+            {
                 renderLinearGradientRect(r, grad, tm, fillOpacity);
 
                 // Vẽ stroke nếu có
                 std::string strokeStr = a.count("stroke") ? a["stroke"] : "none";
                 sf::Color st = stringToColor(strokeStr, "stroke");
-                if (st != sf::Color::Transparent) {
+                if (st != sf::Color::Transparent)
+                {
                     st.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
                     float th = 1.f;
                     if (a.count("stroke-width"))
-                        try { th = std::stof(a["stroke-width"]); }
-                    catch (...) {}
+                        try
+                        {
+                            th = std::stof(a["stroke-width"]);
+                        }
+                        catch (...)
+                        {
+                        }
 
-                    if (st.a > 0 && th > 0) {
+                    if (st.a > 0 && th > 0)
+                    {
                         std::vector<sf::Vector2f> pts;
-                        pts.push_back({ x, y });
-                        pts.push_back({ x + w, y });
-                        pts.push_back({ x + w, y + h });
-                        pts.push_back({ x, y + h });
+                        pts.push_back({x, y});
+                        pts.push_back({x + w, y});
+                        pts.push_back({x + w, y + h});
+                        pts.push_back({x, y + h});
 
-                        for (auto& p : pts) {
+                        for (auto &p : pts)
+                        {
                             float tx, ty;
                             tm.transformPoint(p.x, p.y, tx, ty);
-                            p.x = tx; p.y = ty;
+                            p.x = tx;
+                            p.y = ty;
                         }
                         drawSharpStroke(window, pts, th, st, true);
                     }
                 }
-                return;  // Xong, không cần vẽ solid color
+                return; // Xong, không cần vẽ solid color
             }
             // Vẽ Radial Gradient
-            else if (grad.type == "radial") {
+            else if (grad.type == "radial")
+            {
                 renderRadialGradientRect(r, grad, tm, fillOpacity);
 
                 // Vẽ stroke nếu có (tương tự linear)
                 std::string strokeStr = a.count("stroke") ? a["stroke"] : "none";
                 sf::Color st = stringToColor(strokeStr, "stroke");
-                if (st != sf::Color::Transparent) {
+                if (st != sf::Color::Transparent)
+                {
                     st.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
                     float th = 1.f;
                     if (a.count("stroke-width"))
-                        try { th = std::stof(a["stroke-width"]); }
-                    catch (...) {}
+                        try
+                        {
+                            th = std::stof(a["stroke-width"]);
+                        }
+                        catch (...)
+                        {
+                        }
 
-                    if (st.a > 0 && th > 0) {
+                    if (st.a > 0 && th > 0)
+                    {
                         std::vector<sf::Vector2f> pts;
-                        pts.push_back({ x, y });
-                        pts.push_back({ x + w, y });
-                        pts.push_back({ x + w, y + h });
-                        pts.push_back({ x, y + h });
+                        pts.push_back({x, y});
+                        pts.push_back({x + w, y});
+                        pts.push_back({x + w, y + h});
+                        pts.push_back({x, y + h});
 
-                        for (auto& p : pts) {
+                        for (auto &p : pts)
+                        {
                             float tx, ty;
                             tm.transformPoint(p.x, p.y, tx, ty);
-                            p.x = tx; p.y = ty;
+                            p.x = tx;
+                            p.y = ty;
                         }
                         drawSharpStroke(window, pts, th, st, true);
                     }
@@ -915,7 +1007,8 @@ void SVGRenderer::renderRect(const Rect& r)
                 return;
             }
         }
-        else {
+        else
+        {
             // Gradient không tìm thấy - dùng màu fallback xám
             fillStr = "gray";
         }
@@ -923,12 +1016,12 @@ void SVGRenderer::renderRect(const Rect& r)
 
     // Vẽ solid color (nếu không phải gradient)
     std::vector<sf::Vector2f> pts;
-    pts.push_back({ x, y });
-    pts.push_back({ x + w, y });
-    pts.push_back({ x + w, y + h });
-    pts.push_back({ x, y + h });
+    pts.push_back({x, y});
+    pts.push_back({x + w, y});
+    pts.push_back({x + w, y + h});
+    pts.push_back({x, y + h});
 
-    for (auto& p : pts)
+    for (auto &p : pts)
     {
         float tx, ty;
         tm.transformPoint(p.x, p.y, tx, ty);
@@ -940,7 +1033,7 @@ void SVGRenderer::renderRect(const Rect& r)
     if (f != sf::Color::Transparent)
     {
         f.a = static_cast<std::uint8_t>(getOpacity(a, "fill-opacity") * 255);
-        drawConcaveShape(window, { pts }, f);
+        drawConcaveShape(window, {pts}, f);
     }
 
     sf::Color st = stringToColor(a.count("stroke") ? a["stroke"] : "none", "stroke");
@@ -949,12 +1042,12 @@ void SVGRenderer::renderRect(const Rect& r)
     float th = 1.f;
     if (a.count("stroke-width"))
         try
-    {
-        th = std::stof(a["stroke-width"]);
-    }
-    catch (...)
-    {
-    };
+        {
+            th = std::stof(a["stroke-width"]);
+        }
+        catch (...)
+        {
+        };
     if (st.a > 0 && th > 0)
         drawSharpStroke(window, pts, th, st, true);
 }
@@ -1142,6 +1235,7 @@ void SVGRenderer::renderPolygon(const Polygon &p)
 
             // Thêm tâm vào đầu
             sf::VertexArray va(sf::PrimitiveType::TriangleFan);
+            // [ĐÃ SỬA]: SFML 3.0 aggregate init
             va.append(sf::Vertex{center, fillColor});
             for (auto &pt : localPts)
             {
@@ -1346,13 +1440,48 @@ void SVGRenderer::renderEllipse(const Ellipse &e)
     window.draw(s, states);
 }
 
-// vẽ path
-void SVGRenderer::renderPath(const Path& path)
+// [Thay thế hàm renderPath trong SVGRenderer.cpp]
+
+// Helper tính trọng tâm đa giác (để check lỗ thủng chính xác hơn)
+sf::Vector2f getCentroid(const std::vector<sf::Vector2f> &points)
 {
-    const auto& commands = path.getCommands();
-    if (commands.empty()) return;
+    if (points.empty())
+        return {0, 0};
+    sf::Vector2f sum(0, 0);
+    for (const auto &p : points)
+        sum += p;
+    return sum / (float)points.size();
+}
+
+// Helper tính Bounding Box của một đa giác đơn
+sf::FloatRect getPolygonBounds(const std::vector<sf::Vector2f> &points)
+{
+    if (points.empty())
+        return sf::FloatRect();
+    float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+    for (const auto &p : points)
+    {
+        if (p.x < minX)
+            minX = p.x;
+        if (p.y < minY)
+            minY = p.y;
+        if (p.x > maxX)
+            maxX = p.x;
+        if (p.y > maxY)
+            maxY = p.y;
+    }
+    return sf::FloatRect({minX, minY}, {maxX - minX, maxY - minY});
+}
+
+void SVGRenderer::renderPath(const Path &path)
+{
+    const auto &commands = path.getCommands();
+    if (commands.empty())
+        return;
 
     Attributes a = getEffectiveAttributes(path.getAttributes());
+
+    // Transform
     TransformMatrix tm = getCumulativeTransform();
     tm.combine(path.getTransform());
 
@@ -1360,136 +1489,99 @@ void SVGRenderer::renderPath(const Path& path)
     float scaleY = std::sqrt(tm.m[3] * tm.m[3] + tm.m[4] * tm.m[4]);
     float avgScale = (scaleX + scaleY) / 2.0f;
 
-    float w = 1.0f;
-    if (a.count("stroke-width")) {
-        try { w = std::stof(a["stroke-width"]); }
-        catch (...) {}
-    }
-    float finalStrokeWidth = w * avgScale;
-
-    // Fill & Stroke Colors
-    std::string fillStr = a.count("fill") ? a["fill"] : "black";
-    float fillOpacity = getOpacity(a, "fill-opacity");
-
-    bool hasGradientFill = false;
-    sf::Color fillColor = sf::Color::Transparent;
-
-    if (fillStr.find("url(#") != std::string::npos) {
-        size_t start = fillStr.find("#") + 1;
-        size_t end = fillStr.find(")");
-        std::string gradId = fillStr.substr(start, end - start);
-
-        auto it = gradients_.find(gradId);
-        if (it != gradients_.end()) {
-            hasGradientFill = true;
-        }
-        else {
-            fillColor = sf::Color(200, 200, 200);
-            fillColor.a = static_cast<std::uint8_t>(fillColor.a * fillOpacity);
-        }
-    }
-    else {
-        fillColor = stringToColor(fillStr, "fill");
-        if (fillColor != sf::Color::Transparent) {
-            fillColor.a = static_cast<std::uint8_t>(fillColor.a * fillOpacity);
-        }
-    }
-
-    sf::Color st = stringToColor(a.count("stroke") ? a["stroke"] : "none", "stroke");
-    if (st != sf::Color::Transparent) {
-        st.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
-    }
-
-    // Build geometry
-    std::vector<std::vector<sf::Vector2f>> fillPaths;
-    struct StrokePart {
-        std::vector<sf::Vector2f> points;
-        bool isClosed;
-    };
-    std::vector<StrokePart> strokePaths;
-
+    // --- PARSING PATH DATA ---
+    std::vector<std::vector<sf::Vector2f>> rawSubPaths; // Toạ độ User Space
     std::vector<sf::Vector2f> curPts;
     sf::Vector2f curPos(0, 0), startPos(0, 0);
     sf::Vector2f lastControlPoint(0, 0);
     bool hadControlPoint = false;
-    bool currentSubPathClosed = false;
 
-    auto addBezier = [&](sf::Vector2f p0, sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3) {
+    auto addBezier = [&](sf::Vector2f p0, sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f p3)
+    {
         float len = getLength(p1 - p0) + getLength(p2 - p1) + getLength(p3 - p2);
-        int steps = static_cast<int>(len / 2.0f);
-        if (steps < 20) steps = 20;
-        if (steps > 1000) steps = 1000;
-        for (int i = 1; i <= steps; ++i) {
+        int steps = static_cast<int>(len * 1.5f);
+        if (steps < 30)
+            steps = 30;
+        if (steps > 200)
+            steps = 200;
+        for (int i = 1; i <= steps; ++i)
+        {
             float t = i / (float)steps;
             curPts.push_back(cubicBezier(t, p0, p1, p2, p3));
         }
-        };
+    };
 
-    for (const auto& cmd : commands) {
+    for (const auto &cmd : commands)
+    {
         char t = cmd.type;
-        const auto& args = cmd.args;
+        const auto &args = cmd.args;
 
-        if ((t == 'M' || t == 'm') && !curPts.empty()) {
-            std::vector<sf::Vector2f> cleaned = cleanPolygonPoints(curPts);
-            if (cleaned.size() >= 3) fillPaths.push_back(cleaned);
-            if (curPts.size() >= 2) strokePaths.push_back({ curPts, currentSubPathClosed });
+        if ((t == 'M' || t == 'm') && !curPts.empty())
+        {
+            rawSubPaths.push_back(curPts);
             curPts.clear();
-            currentSubPathClosed = false;
-            hadControlPoint = false;
         }
 
-        if (t == 'M') {
-            curPos = { args[0], args[1] };
+        if (t == 'M')
+        {
+            curPos = {args[0], args[1]};
             startPos = curPos;
             curPts.push_back(curPos);
             hadControlPoint = false;
         }
-        else if (t == 'm') {
+        else if (t == 'm')
+        {
             curPos += {args[0], args[1]};
             startPos = curPos;
             curPts.push_back(curPos);
             hadControlPoint = false;
         }
-        else if (t == 'L') {
-            curPos = { args[0], args[1] };
+        else if (t == 'L')
+        {
+            curPos = {args[0], args[1]};
             curPts.push_back(curPos);
             hadControlPoint = false;
         }
-        else if (t == 'l') {
+        else if (t == 'l')
+        {
             curPos += {args[0], args[1]};
             curPts.push_back(curPos);
             hadControlPoint = false;
         }
-        else if (t == 'H') {
+        else if (t == 'H')
+        {
             curPos.x = args[0];
             curPts.push_back(curPos);
             hadControlPoint = false;
         }
-        else if (t == 'h') {
+        else if (t == 'h')
+        {
             curPos.x += args[0];
             curPts.push_back(curPos);
             hadControlPoint = false;
         }
-        else if (t == 'V') {
+        else if (t == 'V')
+        {
             curPos.y = args[0];
             curPts.push_back(curPos);
             hadControlPoint = false;
         }
-        else if (t == 'v') {
+        else if (t == 'v')
+        {
             curPos.y += args[0];
             curPts.push_back(curPos);
             hadControlPoint = false;
         }
-        else if (t == 'C') {
-            sf::Vector2f p1(args[0], args[1]);
-            sf::Vector2f p2(args[2], args[3]);
-            sf::Vector2f p3(args[4], args[5]);
+        else if (t == 'C')
+        {
+            sf::Vector2f p1(args[0], args[1]), p2(args[2], args[3]), p3(args[4], args[5]);
             addBezier(curPos, p1, p2, p3);
             lastControlPoint = p2;
             hadControlPoint = true;
             curPos = p3;
         }
-        else if (t == 'c') {
+        else if (t == 'c')
+        {
             sf::Vector2f p1 = curPos + sf::Vector2f(args[0], args[1]);
             sf::Vector2f p2 = curPos + sf::Vector2f(args[2], args[3]);
             sf::Vector2f p3 = curPos + sf::Vector2f(args[4], args[5]);
@@ -1498,229 +1590,308 @@ void SVGRenderer::renderPath(const Path& path)
             hadControlPoint = true;
             curPos = p3;
         }
-        else if (t == 'S' || t == 's') {
-            sf::Vector2f p1;
-            if (hadControlPoint) {
-                // Phản chiếu điểm control cuối qua curPos
-                p1 = curPos + (curPos - lastControlPoint);
-            }
-            else {
-                // Không có control point trước -> dùng curPos
-                p1 = curPos;
-            }
-
-            sf::Vector2f p2 = (t == 'S')
-                ? sf::Vector2f(args[0], args[1])
-                : curPos + sf::Vector2f(args[0], args[1]);
-
-            sf::Vector2f p3 = (t == 'S')
-                ? sf::Vector2f(args[2], args[3])
-                : curPos + sf::Vector2f(args[2], args[3]);
-
+        else if (t == 'S' || t == 's')
+        {
+            sf::Vector2f p1 = hadControlPoint ? curPos + (curPos - lastControlPoint) : curPos;
+            sf::Vector2f p2 = (t == 'S') ? sf::Vector2f(args[0], args[1]) : curPos + sf::Vector2f(args[0], args[1]);
+            sf::Vector2f p3 = (t == 'S') ? sf::Vector2f(args[2], args[3]) : curPos + sf::Vector2f(args[2], args[3]);
             addBezier(curPos, p1, p2, p3);
             lastControlPoint = p2;
             hadControlPoint = true;
             curPos = p3;
         }
-        else if (t == 'Q' || t == 'q') {
-            sf::Vector2f P0 = curPos;
-            sf::Vector2f P1 = (t == 'Q')
-                ? sf::Vector2f(args[0], args[1])
-                : curPos + sf::Vector2f(args[0], args[1]);
-            sf::Vector2f P2 = (t == 'Q')
-                ? sf::Vector2f(args[2], args[3])
-                : curPos + sf::Vector2f(args[2], args[3]);
-
-            sf::Vector2f C1 = P0 + (2.0f / 3.0f) * (P1 - P0);
+        else if (t == 'Q' || t == 'q')
+        {
+            sf::Vector2f P1 = (t == 'Q') ? sf::Vector2f(args[0], args[1]) : curPos + sf::Vector2f(args[0], args[1]);
+            sf::Vector2f P2 = (t == 'Q') ? sf::Vector2f(args[2], args[3]) : curPos + sf::Vector2f(args[2], args[3]);
+            sf::Vector2f C1 = curPos + (2.0f / 3.0f) * (P1 - curPos);
             sf::Vector2f C2 = P2 + (2.0f / 3.0f) * (P1 - P2);
-            addBezier(P0, C1, C2, P2);
+            addBezier(curPos, C1, C2, P2);
             lastControlPoint = P1;
             hadControlPoint = true;
             curPos = P2;
         }
-        else if (t == 'Z' || t == 'z') {
-            if (!curPts.empty()) {
-                if (getLength(curPos - startPos) > 0.1f) {
-                    curPts.push_back(startPos);
-                    curPos = startPos;
-                }
-                currentSubPathClosed = true;
+        else if (t == 'A' || t == 'a')
+        {
+            float rx = args[0], ry = args[1], rot = args[2];
+            bool large = (args[3] > 0.5f), sweep = (args[4] > 0.5f);
+            sf::Vector2f endP = (t == 'A') ? sf::Vector2f(args[5], args[6]) : curPos + sf::Vector2f(args[5], args[6]);
+            addArc(curPts, curPos, rx, ry, rot, large, sweep, endP.x, endP.y);
+            curPos = endP;
+            hadControlPoint = false;
+        }
+        else if (t == 'Z' || t == 'z')
+        {
+            if (!curPts.empty())
+            {
+                curPts.push_back(startPos);
+                curPos = startPos;
             }
             hadControlPoint = false;
         }
     }
+    if (!curPts.empty())
+        rawSubPaths.push_back(curPts);
 
-    if (!curPts.empty()) {
-        std::vector<sf::Vector2f> cleaned = cleanPolygonPoints(curPts);
-        if (cleaned.size() >= 3) fillPaths.push_back(cleaned);
-        if (curPts.size() >= 2) strokePaths.push_back({ curPts, currentSubPathClosed });
-    }
+    // --- PROCESSING SHAPES (OUTER vs HOLES) ---
+    // Giữ nguyên User Space cho Fill
+    std::vector<std::vector<sf::Vector2f>> fillPaths;
 
-    // Transform points
-    for (auto& path : fillPaths) {
-        for (auto& p : path) {
-            float tx, ty;
-            tm.transformPoint(p.x, p.y, tx, ty);
-            p.x = tx; p.y = ty;
-        }
-    }
+    // Transform ra World Space cho Stroke (để vẽ nét không bị méo)
+    struct StrokePart
+    {
+        std::vector<sf::Vector2f> points;
+        bool isClosed;
+    };
+    std::vector<StrokePart> strokePaths;
 
-    for (auto& part : strokePaths) {
-        for (auto& p : part.points) {
-            float tx, ty;
-            tm.transformPoint(p.x, p.y, tx, ty);
-            p.x = tx; p.y = ty;
-        }
-    }
+    for (const auto &pathPts : rawSubPaths)
+    {
+        std::vector<sf::Vector2f> cleaned = cleanPolygonPoints(pathPts);
+        if (cleaned.size() >= 3)
+            fillPaths.push_back(cleaned);
 
-    // Render Gradient Fill
-    if (hasGradientFill && !fillPaths.empty()) {
-        size_t start = fillStr.find("#") + 1;
-        size_t end = fillStr.find(")");
-        std::string gradId = fillStr.substr(start, end - start);
-
-        auto it = gradients_.find(gradId);
-        if (it != gradients_.end()) {
-            const Gradient& grad = it->second;
-
-            sf::FloatRect bbox;
-            bool first = true;
-            for (const auto& pathPts : fillPaths) {
-                for (const auto& pt : pathPts) {
-                    if (first) {
-                        bbox = sf::FloatRect({ pt.x, pt.y }, { 0.f, 0.f });
-                        first = false;
-                    }
-                    else {
-                        if (pt.x < bbox.position.x) {
-                            bbox.size.x += bbox.position.x - pt.x;
-                            bbox.position.x = pt.x;
-                        }
-                        if (pt.y < bbox.position.y) {
-                            bbox.size.y += bbox.position.y - pt.y;
-                            bbox.position.y = pt.y;
-                        }
-                        if (pt.x > bbox.position.x + bbox.size.x) {
-                            bbox.size.x = pt.x - bbox.position.x;
-                        }
-                        if (pt.y > bbox.position.y + bbox.size.y) {
-                            bbox.size.y = pt.y - bbox.position.y;
-                        }
-                    }
-                }
+        if (cleaned.size() >= 2)
+        {
+            std::vector<sf::Vector2f> worldPts = pathPts;
+            for (auto &p : worldPts)
+            {
+                float tx, ty;
+                tm.transformPoint(p.x, p.y, tx, ty);
+                p.x = tx;
+                p.y = ty;
             }
-
-            sf::VertexArray vertices(sf::PrimitiveType::Triangles);
-
-            for (const auto& pathPts : fillPaths) {
-                if (pathPts.size() < 3) continue;
-
-                using Point = std::array<double, 2>;
-                std::vector<std::vector<Point>> polygon;
-                std::vector<Point> ring;
-
-                for (const auto& p : pathPts) {
-                    ring.push_back({ (double)p.x, (double)p.y });
-                }
-
-                if (ring.size() >= 3) {
-                    polygon.push_back(ring);
-                    std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
-
-                    for (size_t i = 0; i < indices.size(); i += 3) {
-                        for (int j = 0; j < 3; j++) {
-                            uint32_t idx = indices[i + j];
-                            if (idx < pathPts.size()) {
-                                sf::Vector2f pt = pathPts[idx];
-                                sf::Color color = (grad.type == "linear")
-                                    ? grad.getLinearColorAt(pt.x, pt.y, bbox)
-                                    : grad.getRadialColorAt(pt.x, pt.y, bbox);
-                                color.a = static_cast<std::uint8_t>(color.a * fillOpacity);
-                                vertices.append(sf::Vertex(pt, color));
-                            }
-                        }
-                    }
-                }
-            }
-
-            window.draw(vertices);
+            bool closed = (getLength(pathPts.front() - pathPts.back()) < 0.1f);
+            strokePaths.push_back({worldPts, closed});
         }
     }
-    // Render Solid Fill
-    else if (fillColor != sf::Color::Transparent && !fillPaths.empty()) {
-        struct ShapeGroup {
-            std::vector<sf::Vector2f> outer;
-            std::vector<std::vector<sf::Vector2f>> holes;
-        };
-        std::vector<ShapeGroup> groups;
 
-        auto getCentroid = [](const std::vector<sf::Vector2f>& pts) {
-            sf::Vector2f sum(0, 0);
-            for (const auto& p : pts) sum += p;
-            return pts.empty() ? sf::Vector2f(0, 0) : sum / static_cast<float>(pts.size());
-            };
+    struct ShapeGroup
+    {
+        std::vector<sf::Vector2f> outer;
+        std::vector<std::vector<sf::Vector2f>> holes;
+        sf::FloatRect outerBounds;
+    };
+    std::vector<ShapeGroup> shapeGroups;
 
-        std::sort(fillPaths.begin(), fillPaths.end(),
-            [](const auto& a, const auto& b) { return getArea(a) > getArea(b); });
+    if (!fillPaths.empty())
+    {
+        // [CẢI TIẾN] Logic phát hiện Hole
+        // 1. Sắp xếp theo diện tích giảm dần
+        std::sort(fillPaths.begin(), fillPaths.end(), [](const auto &a, const auto &b)
+                  { return getArea(a) > getArea(b); });
 
-        for (const auto& poly : fillPaths) {
-            if (poly.size() < 3) continue;
-            bool added = false;
-            sf::Vector2f center = getCentroid(poly);
+        for (const auto &poly : fillPaths)
+        {
+            if (poly.size() < 3)
+                continue;
 
-            for (auto& g : groups) {
-                if (isPointInPolygon(center, g.outer)) {
-                    bool insideHole = false;
-                    for (const auto& hole : g.holes) {
-                        if (isPointInPolygon(center, hole)) {
-                            insideHole = true;
+            sf::FloatRect polyBounds = getPolygonBounds(poly);
+            sf::Vector2f centroid = getCentroid(poly);
+            bool addedToGroup = false;
+
+            for (auto &g : shapeGroups)
+            {
+                // Check 1: Lỗ phải nằm gọn trong Bounding Box của Outer (Điều kiện cần)
+                if (g.outerBounds.position.x <= polyBounds.position.x &&
+                    g.outerBounds.position.y <= polyBounds.position.y &&
+                    (g.outerBounds.position.x + g.outerBounds.size.x) >= (polyBounds.position.x + polyBounds.size.x) &&
+                    (g.outerBounds.position.y + g.outerBounds.size.y) >= (polyBounds.position.y + polyBounds.size.y))
+                {
+                    // Check 2: Điểm trọng tâm phải nằm trong Outer (Điều kiện đủ)
+                    // Nếu đã là lỗ của lỗ (đảo), logic này có thể cần recursive, nhưng với Firefox thì chỉ cần 1 cấp.
+                    bool insideExistingHole = false;
+                    for (const auto &h : g.holes)
+                    {
+                        // Nếu nằm trong một cái lỗ đã có -> Nó là đảo (Island) -> Coi là Outer mới
+                        if (isPointInPolygon(centroid, h))
+                        {
+                            insideExistingHole = true;
                             break;
                         }
                     }
-                    if (!insideHole) {
+
+                    if (!insideExistingHole && isPointInPolygon(centroid, g.outer))
+                    {
                         g.holes.push_back(poly);
-                        added = true;
+                        addedToGroup = true;
+                        break;
                     }
-                    break;
                 }
             }
-            if (!added) groups.push_back({ poly, {} });
-        }
 
-        for (const auto& g : groups) {
-            std::vector<std::vector<sf::Vector2f>> inp;
-            inp.push_back(g.outer);
-            for (const auto& h : g.holes) inp.push_back(h);
-            drawConcaveShape(window, inp, fillColor);
+            if (!addedToGroup)
+            {
+                shapeGroups.push_back({poly, {}, polyBounds});
+            }
         }
     }
 
-    // Render Stroke
-    if (st != sf::Color::Transparent && finalStrokeWidth > 0) {
-        for (const auto& part : strokePaths) {
-            drawSharpStroke(window, part.points, finalStrokeWidth, st, part.isClosed);
+    // Earcut Helper
+    auto getTriangulatedVerts = [](const std::vector<std::vector<sf::Vector2f>> &floatPoly, const Gradient *grad, const sf::FloatRect &bbox, float opacity, sf::Color solidColor)
+    {
+        std::vector<sf::Vertex> vertices;
+        if (floatPoly.empty())
+            return vertices;
+
+        const double SCALE = 100000.0;
+        using IntPoint = std::array<int64_t, 2>;
+        std::vector<std::vector<IntPoint>> intPolygon;
+        std::vector<sf::Vector2f> flatFloatPoints;
+
+        for (const auto &ring : floatPoly)
+        {
+            std::vector<IntPoint> intRing;
+            for (const auto &p : ring)
+            {
+                intRing.push_back({static_cast<int64_t>(p.x * SCALE), static_cast<int64_t>(p.y * SCALE)});
+            }
+            intPolygon.push_back(intRing);
+            flatFloatPoints.insert(flatFloatPoints.end(), ring.begin(), ring.end());
+        }
+
+        std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(intPolygon);
+
+        for (uint32_t idx : indices)
+        {
+            if (idx < flatFloatPoints.size())
+            {
+                sf::Vector2f pt = flatFloatPoints[idx];
+                sf::Color finalColor;
+                if (grad)
+                {
+                    finalColor = (grad->type == "linear") ? grad->getLinearColorAt(pt.x, pt.y, bbox) : grad->getRadialColorAt(pt.x, pt.y, bbox);
+                }
+                else
+                {
+                    finalColor = solidColor;
+                }
+                finalColor.a = static_cast<std::uint8_t>(finalColor.a * opacity);
+                vertices.push_back(sf::Vertex{pt, finalColor});
+            }
+        }
+        return vertices;
+    };
+
+    // --- DRAW FILL ---
+    std::string fillStr = a.count("fill") ? a["fill"] : "black";
+    float fillOpacity = getOpacity(a, "fill-opacity");
+    bool isGradient = false;
+    Gradient *activeGrad = nullptr;
+    Gradient tempGrad;
+
+    if (fillStr.find("url(#") != std::string::npos)
+    {
+        size_t start = fillStr.find("#") + 1;
+        size_t end = fillStr.find(")");
+        std::string gradId = fillStr.substr(start, end - start);
+        if (gradients_.count(gradId))
+        {
+            isGradient = true;
+            tempGrad = gradients_.at(gradId);
+            activeGrad = &tempGrad;
+
+            // Fix UserSpaceOnUse for Chrome/Firefox compatibility
+            if (activeGrad->gradientUnits == "userSpaceOnUse")
+            {
+                // Logic transform đặc biệt nếu cần
+            }
+        }
+    }
+
+    sf::Color solidColor = sf::Color::Transparent;
+    if (!isGradient)
+        solidColor = stringToColor(fillStr, "fill");
+
+    if (isGradient || solidColor != sf::Color::Transparent)
+    {
+        // Tính Bounding Box tổng cho toàn bộ Path (để Gradient phủ đều)
+        sf::FloatRect bbox;
+        float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+        bool hasPoints = false;
+
+        for (const auto &g : shapeGroups)
+        {
+            if (g.outerBounds.position.x < minX)
+                minX = g.outerBounds.position.x;
+            if (g.outerBounds.position.y < minY)
+                minY = g.outerBounds.position.y;
+            if (g.outerBounds.position.x + g.outerBounds.size.x > maxX)
+                maxX = g.outerBounds.position.x + g.outerBounds.size.x;
+            if (g.outerBounds.position.y + g.outerBounds.size.y > maxY)
+                maxY = g.outerBounds.position.y + g.outerBounds.size.y;
+            hasPoints = true;
+        }
+        if (hasPoints)
+        {
+            bbox = sf::FloatRect({minX, minY}, {maxX - minX, maxY - minY});
+        }
+
+        sf::RenderStates states;
+        states.transform = getSFMLTransform(tm);
+
+        for (const auto &g : shapeGroups)
+        {
+            std::vector<std::vector<sf::Vector2f>> polyToTriangulate;
+            polyToTriangulate.push_back(g.outer);
+            for (const auto &h : g.holes)
+                polyToTriangulate.push_back(h);
+
+            std::vector<sf::Vertex> verts = getTriangulatedVerts(polyToTriangulate, activeGrad, bbox, fillOpacity, solidColor);
+
+            if (!verts.empty())
+            {
+                window.draw(verts.data(), verts.size(), sf::PrimitiveType::Triangles, states);
+            }
+        }
+    }
+
+    // --- DRAW STROKE ---
+    std::string strokeStr = a.count("stroke") ? a["stroke"] : "none";
+    if (strokeStr != "none")
+    {
+        sf::Color strokeColor = stringToColor(strokeStr, "stroke");
+        if (strokeColor != sf::Color::Transparent)
+        {
+            strokeColor.a = static_cast<std::uint8_t>(getOpacity(a, "stroke-opacity") * 255);
+            float w = 1.0f;
+            if (a.count("stroke-width"))
+                try
+                {
+                    w = std::stof(a["stroke-width"]);
+                }
+                catch (...)
+                {
+                }
+            float finalStrokeWidth = w * avgScale;
+            if (finalStrokeWidth > 0)
+            {
+                for (const auto &part : strokePaths)
+                    drawSharpStroke(window, part.points, finalStrokeWidth, strokeColor, part.isClosed);
+            }
         }
     }
 }
-
 // Render Linear Gradient cho Rect
 
-void SVGRenderer::renderLinearGradientRect(const Rect& r, const Gradient& grad,
-    const TransformMatrix& tm, float opacity)
+void SVGRenderer::renderLinearGradientRect(const Rect &r, const Gradient &grad,
+                                           const TransformMatrix &tm, float opacity)
 {
     float x = r.getX(), y = r.getY(), w = r.getWidth(), h = r.getHeight();
-    sf::FloatRect bbox({ x, y } , { w, h });
+    sf::FloatRect bbox({x, y}, {w, h});
 
     // Chia rect thành grid nhỏ (trade-off giữa chất lượng và performance)
-    const int GRID_SIZE = 50;  // Có thể điều chỉnh: 20 = nhanh, 100 = đẹp
+    const int GRID_SIZE = 50; // Có thể điều chỉnh: 20 = nhanh, 100 = đẹp
 
     float stepX = w / GRID_SIZE;
     float stepY = h / GRID_SIZE;
 
     sf::VertexArray vertices(sf::PrimitiveType::Triangles);
 
-    for (int iy = 0; iy < GRID_SIZE; iy++) {
-        for (int ix = 0; ix < GRID_SIZE; ix++) {
+    for (int iy = 0; iy < GRID_SIZE; iy++)
+    {
+        for (int ix = 0; ix < GRID_SIZE; ix++)
+        {
             float px = x + ix * stepX;
             float py = y + iy * stepY;
             float px2 = px + stepX;
@@ -1747,14 +1918,15 @@ void SVGRenderer::renderLinearGradientRect(const Rect& r, const Gradient& grad,
 
             // Tạo 2 tam giác cho mỗi cell
             // Triangle 1: top-left, top-right, bottom-right
-            vertices.append(sf::Vertex(sf::Vector2f(tx1, ty1), c1));
-            vertices.append(sf::Vertex(sf::Vector2f(tx2, ty2), c2));
-            vertices.append(sf::Vertex(sf::Vector2f(tx3, ty3), c3));
+            // [ĐÃ SỬA]: SFML 3.0 aggregate init
+            vertices.append(sf::Vertex{sf::Vector2f(tx1, ty1), c1});
+            vertices.append(sf::Vertex{sf::Vector2f(tx2, ty2), c2});
+            vertices.append(sf::Vertex{sf::Vector2f(tx3, ty3), c3});
 
             // Triangle 2: top-left, bottom-right, bottom-left
-            vertices.append(sf::Vertex(sf::Vector2f(tx1, ty1), c1));
-            vertices.append(sf::Vertex(sf::Vector2f(tx3, ty3), c3));
-            vertices.append(sf::Vertex(sf::Vector2f(tx4, ty4), c4));
+            vertices.append(sf::Vertex{sf::Vector2f(tx1, ty1), c1});
+            vertices.append(sf::Vertex{sf::Vector2f(tx3, ty3), c3});
+            vertices.append(sf::Vertex{sf::Vector2f(tx4, ty4), c4});
         }
     }
 
@@ -1763,11 +1935,11 @@ void SVGRenderer::renderLinearGradientRect(const Rect& r, const Gradient& grad,
 
 // Render Radial Gradient cho Rect
 
-void SVGRenderer::renderRadialGradientRect(const Rect& r, const Gradient& grad,
-    const TransformMatrix& tm, float opacity)
+void SVGRenderer::renderRadialGradientRect(const Rect &r, const Gradient &grad,
+                                           const TransformMatrix &tm, float opacity)
 {
     float x = r.getX(), y = r.getY(), w = r.getWidth(), h = r.getHeight();
-    sf::FloatRect bbox({ x, y }, { w, h });
+    sf::FloatRect bbox({x, y}, {w, h});
 
     // Tương tự linear nhưng dùng getRadialColorAt()
     const int GRID_SIZE = 50;
@@ -1777,8 +1949,10 @@ void SVGRenderer::renderRadialGradientRect(const Rect& r, const Gradient& grad,
 
     sf::VertexArray vertices(sf::PrimitiveType::Triangles);
 
-    for (int iy = 0; iy < GRID_SIZE; iy++) {
-        for (int ix = 0; ix < GRID_SIZE; ix++) {
+    for (int iy = 0; iy < GRID_SIZE; iy++)
+    {
+        for (int ix = 0; ix < GRID_SIZE; ix++)
+        {
             float px = x + ix * stepX;
             float py = y + iy * stepY;
             float px2 = px + stepX;
@@ -1801,13 +1975,14 @@ void SVGRenderer::renderRadialGradientRect(const Rect& r, const Gradient& grad,
             tm.transformPoint(px2, py2, tx3, ty3);
             tm.transformPoint(px, py2, tx4, ty4);
 
-            vertices.append(sf::Vertex(sf::Vector2f(tx1, ty1), c1));
-            vertices.append(sf::Vertex(sf::Vector2f(tx2, ty2), c2));
-            vertices.append(sf::Vertex(sf::Vector2f(tx3, ty3), c3));
+            // [ĐÃ SỬA]: SFML 3.0 aggregate init
+            vertices.append(sf::Vertex{sf::Vector2f(tx1, ty1), c1});
+            vertices.append(sf::Vertex{sf::Vector2f(tx2, ty2), c2});
+            vertices.append(sf::Vertex{sf::Vector2f(tx3, ty3), c3});
 
-            vertices.append(sf::Vertex(sf::Vector2f(tx1, ty1), c1));
-            vertices.append(sf::Vertex(sf::Vector2f(tx3, ty3), c3));
-            vertices.append(sf::Vertex(sf::Vector2f(tx4, ty4), c4));
+            vertices.append(sf::Vertex{sf::Vector2f(tx1, ty1), c1});
+            vertices.append(sf::Vertex{sf::Vector2f(tx3, ty3), c3});
+            vertices.append(sf::Vertex{sf::Vector2f(tx4, ty4), c4});
         }
     }
 

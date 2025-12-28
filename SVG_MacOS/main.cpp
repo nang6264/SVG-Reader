@@ -53,6 +53,7 @@ void loadAndRender(const std::string& filename) {
 }
 
 int main() {
+    std::setlocale(LC_NUMERIC, "C");
     std::string filename;
 
     while (true) {

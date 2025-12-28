@@ -1,5 +1,0 @@
-<svg>
-  <circle cx="200" cy="300" r="100" fill="url(#testRadial)" stroke="blue" stroke-width="5"/>
-
-  <circle cx="600" cy="300" r="100" fill="url(#idNayKhongTonTai)" />
-</svg>
