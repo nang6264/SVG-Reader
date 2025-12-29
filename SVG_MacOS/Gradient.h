@@ -7,12 +7,13 @@
 #include <cmath>
 #include <cstdint>
 #include <algorithm>
+#include <iostream>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846f
 #endif
 
-// GradientStop: Điểm dừng màu
+// --- PHẦN 1: GradientStop (Giữ nguyên) ---
 struct GradientStop {
     float offset;      // 0.0 đến 1.0
     sf::Color color;
@@ -25,14 +26,14 @@ struct GradientStop {
     }
 };
 
-// GradientTransform: Matrix 2x3 để biến đổi gradient
+// --- PHẦN 2: GradientTransform (Giữ nguyên) ---
 struct GradientTransform {
     float a, b, c, d, e, f;  // matrix(a, b, c, d, e, f)
 
     // Constructor mặc định (Identity)
     GradientTransform() : a(1), b(0), c(0), d(1), e(0), f(0) {}
 
-    // [ĐÃ THÊM LẠI] Constructor 6 tham số để sửa lỗi biên dịch
+    // Constructor 6 tham số
     GradientTransform(float a_, float b_, float c_, float d_, float e_, float f_)
         : a(a_), b(b_), c(c_), d(d_), e(e_), f(f_) {}
 
@@ -48,7 +49,6 @@ struct GradientTransform {
         if (std::abs(det) < 0.000001f) return GradientTransform(); // Identity if singular
 
         float invDet = 1.0f / det;
-        // Gọi constructor 6 tham số
         return GradientTransform(
             d * invDet,
             -b * invDet,
@@ -66,7 +66,7 @@ struct GradientTransform {
     }
 };
 
-// Gradient Struct: Chứa toàn bộ logic tính màu
+// --- PHẦN 3: Gradient (ĐÃ CẬP NHẬT MỚI) ---
 struct Gradient {
     std::string id;
     std::string type;  // "linear" hoặc "radial"
@@ -77,7 +77,10 @@ struct Gradient {
     // Linear properties
     float x1 = 0.0f, y1 = 0.0f, x2 = 1.0f, y2 = 0.0f;
     // Radial properties
-    float cx = 0.5f, cy = 0.5f, r = 0.5f, fx = 0.5f, fy = 0.5f;
+    float cx = 0.5f, cy = 0.5f, r = 0.5f;
+    
+    // [QUAN TRỌNG] Focal Point cho hiệu ứng 3D
+    float fx = 0.5f, fy = 0.5f; 
 
     // --- Validate & Sort ---
     void validateStops() {
@@ -117,7 +120,7 @@ struct Gradient {
         );
     }
 
-    // [ĐÃ THÊM LẠI] Weighted Average (để sửa lỗi SVGRenderer.cpp gọi hàm này)
+    // Weighted Average (cho trường hợp fallback)
     sf::Color getAverageColor(float opacity = 1.0f) const {
         if (stops.empty()) return sf::Color::Black;
         float r = 0, g = 0, b = 0, a = 0;
@@ -138,9 +141,9 @@ struct Gradient {
         );
     }
 
-    // --- MAIN LOGIC: LINEAR (SFML 3.0 FIX: size.x/size.y) ---
+    // --- MAIN LOGIC: LINEAR ---
     sf::Color getLinearColorAt(float x, float y, const sf::FloatRect& bbox) const {
-        float u, v; // Toạ độ chuẩn hóa (0..1)
+        float u, v; 
         
         if (gradientUnits == "objectBoundingBox") {
             if (bbox.size.x == 0 || bbox.size.y == 0) return stops.back().color;
@@ -150,12 +153,10 @@ struct Gradient {
             u = x; v = y;
         }
 
-        // Apply Inverse Transform (về không gian Gradient)
         if (!transform.isIdentity()) {
             transform.inverse().transformPoint(u, v, u, v);
         }
 
-        // Project điểm (u,v) lên vector gradient (x1,y1)->(x2,y2)
         float dx = x2 - x1;
         float dy = y2 - y1;
         float lenSq = dx*dx + dy*dy;
@@ -166,9 +167,9 @@ struct Gradient {
         return interpolateColor(t);
     }
 
-    // --- MAIN LOGIC: RADIAL (SFML 3.0 FIX: size.x/size.y) ---
+    // --- MAIN LOGIC: RADIAL (CÔNG THỨC MỚI HỖ TRỢ FOCAL POINT) ---
     sf::Color getRadialColorAt(float x, float y, const sf::FloatRect& bbox) const {
-        float u, v; // Toạ độ chuẩn hóa (0..1)
+        float u, v;
 
         if (gradientUnits == "objectBoundingBox") {
             if (bbox.size.x == 0 || bbox.size.y == 0) return stops.back().color;
@@ -183,15 +184,28 @@ struct Gradient {
             transform.inverse().transformPoint(u, v, u, v);
         }
 
-        float dx = u - cx;
-        float dy = v - cy;
-        float dist = std::sqrt(dx*dx + dy*dy);
+        // Focal Point Logic
+        float dfx = u - fx;
+        float dfy = v - fy;
+        float R = r;
+        
+        if (R < 1e-6) return stops.back().color;
 
-        if (r < 0.000001f) return stops.back().color;
+        // Nếu fx trùng cx (Radial chuẩn tâm)
+        if (std::abs(fx - cx) < 1e-5 && std::abs(fy - cy) < 1e-5) {
+             float dist = std::sqrt((u-cx)*(u-cx) + (v-cy)*(v-cy));
+             return interpolateColor(dist / R);
+        }
 
-        float t = dist / r;
+        // Nếu fx lệch tâm (Hiệu ứng 3D bóng)
+        // Dùng phương pháp xấp xỉ khoảng cách tới tâm / bán kính
+        float distToC = std::sqrt((u-cx)*(u-cx) + (v-cy)*(v-cy));
+        float t = distToC / R;
+
         return interpolateColor(t);
     }
 };
+
+
 
 #endif

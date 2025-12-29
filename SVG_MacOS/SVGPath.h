@@ -12,12 +12,14 @@ struct PathCommand {
 
 class Path : public SVGElement {
 private:
-    std::string d_;                      // Biến lưu chuỗi lệnh
-    std::vector<PathCommand> commands_;  // Biến lưu lệnh đã phân tích
+    std::string d_;
+    std::vector<PathCommand> commands_;
     void parsePathData();
 
 public:
+    // Đây là hàm mà Linker đang báo thiếu
     Path(const Attributes& attributes);
+
     void draw(SVGRenderer& renderer) const override;
     std::string getElementName() const override { return "path"; }
     const std::vector<PathCommand>& getCommands() const { return commands_; }

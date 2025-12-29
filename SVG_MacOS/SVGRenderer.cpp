@@ -17,6 +17,48 @@
 #define M_PI 3.14159265358979323846f
 #endif
 
+// --- HÀM MỚI: TẠO TEXTURE GRADIENT ---
+// Dùng để tạo ra "tờ giấy màu" mịn màng thay vì tô màu đỉnh
+sf::Texture generateGradientTexture(const Gradient &grad, const sf::FloatRect &bbox)
+{
+    sf::Image img;
+    unsigned int width = 256;
+    unsigned int height = 256;
+
+    // [FIX LỖI 1]: SFML 3.0 đổi create(w, h) thành resize({w, h})
+    img.resize({width, height});
+
+    for (unsigned int y = 0; y < height; ++y)
+    {
+        for (unsigned int x = 0; x < width; ++x)
+        {
+            float worldX = bbox.position.x + (x / (float)width) * bbox.size.x;
+            float worldY = bbox.position.y + (y / (float)height) * bbox.size.y;
+
+            sf::Color c;
+            if (grad.type == "linear")
+            {
+                c = grad.getLinearColorAt(worldX, worldY, bbox);
+            }
+            else
+            {
+                c = grad.getRadialColorAt(worldX, worldY, bbox);
+            }
+
+            // [FIX LỖI 2]: SFML 3.0 yêu cầu truyền Vector2u thay vì x, y rời rạc
+            // Thêm ngoặc nhọn {} bao quanh x, y
+            img.setPixel({x, y}, c);
+        }
+    }
+
+    sf::Texture tex;
+    // [FIX WARNING]: loadFromImage trả về bool, cần check hoặc cast void để tắt warning
+    (void)tex.loadFromImage(img);
+
+    tex.setSmooth(true);
+    return tex;
+}
+
 static inline std::string trimString(const std::string &s)
 {
     auto wsfront = std::find_if_not(s.begin(), s.end(), [](int c)
@@ -1473,6 +1515,52 @@ sf::FloatRect getPolygonBounds(const std::vector<sf::Vector2f> &points)
     return sf::FloatRect({minX, minY}, {maxX - minX, maxY - minY});
 }
 
+// Hàm đệ quy chia nhỏ tam giác để Gradient mịn hơn
+void subdivideAndAppend(
+    const sf::Vector2f &p1, const sf::Vector2f &p2, const sf::Vector2f &p3,
+    const Gradient *grad, const sf::FloatRect &bbox, float opacity, sf::Color solidColor,
+    std::vector<sf::Vertex> &outVertices, int depth)
+{
+    // [OPTIMIZATION]
+    // 1. Kiểm tra kích thước tam giác. Nếu cạnh < 4 pixel thì dừng chia nhỏ (mắt thường không thấy được)
+    // Giả sử bbox pixel coordinate.
+    float edgeSq1 = (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y);
+    float edgeSq2 = (p2.x - p3.x) * (p2.x - p3.x) + (p2.y - p3.y) * (p2.y - p3.y);
+
+    // Nếu tam giác quá nhỏ (dưới 16 đơn vị diện tích) HOẶC hết depth -> Dừng
+    if (depth <= 0 || (edgeSq1 < 16.0f && edgeSq2 < 16.0f))
+    {
+        sf::Color c1, c2, c3;
+        if (grad)
+        {
+            c1 = (grad->type == "linear") ? grad->getLinearColorAt(p1.x, p1.y, bbox) : grad->getRadialColorAt(p1.x, p1.y, bbox);
+            c2 = (grad->type == "linear") ? grad->getLinearColorAt(p2.x, p2.y, bbox) : grad->getRadialColorAt(p2.x, p2.y, bbox);
+            c3 = (grad->type == "linear") ? grad->getLinearColorAt(p3.x, p3.y, bbox) : grad->getRadialColorAt(p3.x, p3.y, bbox);
+        }
+        else
+        {
+            c1 = c2 = c3 = solidColor;
+        }
+        c1.a = static_cast<std::uint8_t>(c1.a * opacity);
+        c2.a = static_cast<std::uint8_t>(c2.a * opacity);
+        c3.a = static_cast<std::uint8_t>(c3.a * opacity);
+
+        outVertices.push_back(sf::Vertex{p1, c1});
+        outVertices.push_back(sf::Vertex{p2, c2});
+        outVertices.push_back(sf::Vertex{p3, c3});
+        return;
+    }
+
+    // Chia thành 4 tam giác con
+    sf::Vector2f m12 = (p1 + p2) * 0.5f;
+    sf::Vector2f m23 = (p2 + p3) * 0.5f;
+    sf::Vector2f m31 = (p3 + p1) * 0.5f;
+
+    subdivideAndAppend(p1, m12, m31, grad, bbox, opacity, solidColor, outVertices, depth - 1);
+    subdivideAndAppend(m12, p2, m23, grad, bbox, opacity, solidColor, outVertices, depth - 1);
+    subdivideAndAppend(m31, m23, p3, grad, bbox, opacity, solidColor, outVertices, depth - 1);
+    subdivideAndAppend(m12, m23, m31, grad, bbox, opacity, solidColor, outVertices, depth - 1);
+}
 void SVGRenderer::renderPath(const Path &path)
 {
     const auto &commands = path.getCommands();
@@ -1515,6 +1603,25 @@ void SVGRenderer::renderPath(const Path &path)
     {
         char t = cmd.type;
         const auto &args = cmd.args;
+
+        size_t requiredArgs = 0;
+        char upperT = std::toupper(t);
+        if (upperT == 'M' || upperT == 'L' || upperT == 'T')
+            requiredArgs = 2;
+        else if (upperT == 'H' || upperT == 'V')
+            requiredArgs = 1;
+        else if (upperT == 'C')
+            requiredArgs = 6;
+        else if (upperT == 'S' || upperT == 'Q')
+            requiredArgs = 4;
+        else if (upperT == 'A')
+            requiredArgs = 7;
+
+        if (args.size() < requiredArgs)
+        {
+            // Nếu lệnh bị lỗi thiếu tham số, bỏ qua để không crash chương trình
+            continue;
+        }
 
         if ((t == 'M' || t == 'm') && !curPts.empty())
         {
@@ -1607,6 +1714,35 @@ void SVGRenderer::renderPath(const Path &path)
             sf::Vector2f C1 = curPos + (2.0f / 3.0f) * (P1 - curPos);
             sf::Vector2f C2 = P2 + (2.0f / 3.0f) * (P1 - P2);
             addBezier(curPos, C1, C2, P2);
+
+            // [THÊM DÒNG NÀY ĐỂ T HOẠT ĐỘNG]
+            lastControlPoint = P1;
+            hadControlPoint = true;
+            curPos = P2;
+        }
+
+        // --- [THÊM MỚI HOÀN TOÀN] Lệnh T / t bị thiếu ---
+        else if (t == 'T' || t == 't')
+        {
+            sf::Vector2f P1;
+            if (hadControlPoint)
+            {
+                // Phản chiếu
+                P1 = curPos + (curPos - lastControlPoint);
+            }
+            else
+            {
+                P1 = curPos;
+            }
+
+            sf::Vector2f P2 = (t == 'T') ? sf::Vector2f(args[0], args[1]) : curPos + sf::Vector2f(args[0], args[1]);
+
+            // Quadratic -> Cubic
+            sf::Vector2f C1 = curPos + (2.0f / 3.0f) * (P1 - curPos);
+            sf::Vector2f C2 = P2 + (2.0f / 3.0f) * (P1 - P2);
+
+            addBezier(curPos, C1, C2, P2);
+
             lastControlPoint = P1;
             hadControlPoint = true;
             curPos = P2;
@@ -1744,10 +1880,16 @@ void SVGRenderer::renderPath(const Path &path)
             std::vector<IntPoint> intRing;
             for (const auto &p : ring)
             {
+                if (std::abs(p.x) > 1e7 || std::abs(p.y) > 1e7)
+                    continue;
                 intRing.push_back({static_cast<int64_t>(p.x * SCALE), static_cast<int64_t>(p.y * SCALE)});
             }
-            intPolygon.push_back(intRing);
-            flatFloatPoints.insert(flatFloatPoints.end(), ring.begin(), ring.end());
+            // Earcut yêu cầu đa giác không được rỗng
+            if (intRing.size() >= 3)
+            {
+                intPolygon.push_back(intRing);
+                flatFloatPoints.insert(flatFloatPoints.end(), ring.begin(), ring.end());
+            }
         }
 
         std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(intPolygon);
@@ -1770,16 +1912,37 @@ void SVGRenderer::renderPath(const Path &path)
                 vertices.push_back(sf::Vertex{pt, finalColor});
             }
         }
+        // [NEW LOGIC] Thay vì push thẳng vertex, ta gọi hàm chia nhỏ
+        for (size_t i = 0; i < indices.size(); i += 3)
+        {
+            uint32_t idx1 = indices[i];
+            uint32_t idx2 = indices[i + 1];
+            uint32_t idx3 = indices[i + 2];
+
+            if (idx1 < flatFloatPoints.size() && idx2 < flatFloatPoints.size() && idx3 < flatFloatPoints.size())
+            {
+                sf::Vector2f p1 = flatFloatPoints[idx1];
+                sf::Vector2f p2 = flatFloatPoints[idx2];
+                sf::Vector2f p3 = flatFloatPoints[idx3];
+
+                // Nếu có Gradient, chia nhỏ tam giác (Depth = 2 hoặc 3)
+                // Nếu màu Solid, không cần chia nhỏ (Depth = 0) để tối ưu
+                // int depth = (grad != nullptr) ? 3 : 0;
+                int depth = (grad != nullptr) ? 5 : 0;
+                subdivideAndAppend(p1, p2, p3, grad, bbox, opacity, solidColor, vertices, depth);
+            }
+        }
         return vertices;
     };
 
     // --- DRAW FILL ---
+    // --- DRAW FILL (CODE MỚI HOÀN TOÀN) ---
     std::string fillStr = a.count("fill") ? a["fill"] : "black";
     float fillOpacity = getOpacity(a, "fill-opacity");
+
+    // 1. Kiểm tra xem có phải Gradient không
     bool isGradient = false;
     Gradient *activeGrad = nullptr;
-    Gradient tempGrad;
-
     if (fillStr.find("url(#") != std::string::npos)
     {
         size_t start = fillStr.find("#") + 1;
@@ -1788,24 +1951,21 @@ void SVGRenderer::renderPath(const Path &path)
         if (gradients_.count(gradId))
         {
             isGradient = true;
-            tempGrad = gradients_.at(gradId);
-            activeGrad = &tempGrad;
-
-            // Fix UserSpaceOnUse for Chrome/Firefox compatibility
-            if (activeGrad->gradientUnits == "userSpaceOnUse")
-            {
-                // Logic transform đặc biệt nếu cần
-            }
+            activeGrad = &gradients_.at(gradId);
         }
     }
 
+    // 2. Xử lý màu Solid (nếu không phải Gradient)
     sf::Color solidColor = sf::Color::Transparent;
     if (!isGradient)
+    {
         solidColor = stringToColor(fillStr, "fill");
+    }
 
+    // 3. Tiến hành vẽ nếu có màu
     if (isGradient || solidColor != sf::Color::Transparent)
     {
-        // Tính Bounding Box tổng cho toàn bộ Path (để Gradient phủ đều)
+        // A. Tính Bounding Box tổng cho toàn bộ Path (để Gradient phủ đều)
         sf::FloatRect bbox;
         float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
         bool hasPoints = false;
@@ -1827,21 +1987,102 @@ void SVGRenderer::renderPath(const Path &path)
             bbox = sf::FloatRect({minX, minY}, {maxX - minX, maxY - minY});
         }
 
+        // B. Chuẩn bị Texture (nếu là Gradient)
+        sf::Texture gradTex;
+        if (isGradient && activeGrad)
+        {
+            gradTex = generateGradientTexture(*activeGrad, bbox);
+        }
+
         sf::RenderStates states;
         states.transform = getSFMLTransform(tm);
 
+        // Nếu là Gradient thì gắn Texture vào, nếu không thì để NULL
+        if (isGradient)
+        {
+            states.texture = &gradTex;
+        }
+
+        // C. Duyệt qua từng nhóm hình (Outer + Holes) để cắt tam giác
         for (const auto &g : shapeGroups)
         {
+            // Gom outer và holes vào một danh sách để Earcut xử lý
             std::vector<std::vector<sf::Vector2f>> polyToTriangulate;
             polyToTriangulate.push_back(g.outer);
             for (const auto &h : g.holes)
                 polyToTriangulate.push_back(h);
 
-            std::vector<sf::Vertex> verts = getTriangulatedVerts(polyToTriangulate, activeGrad, bbox, fillOpacity, solidColor);
+            // --- BẮT ĐẦU LOGIC EARCUT ---
+            const double SCALE = 100000.0;
+            using IntPoint = std::array<int64_t, 2>;
+            std::vector<std::vector<IntPoint>> intPolygon;
+            std::vector<sf::Vector2f> flatPoints;
 
-            if (!verts.empty())
+            for (const auto &ring : polyToTriangulate)
             {
-                window.draw(verts.data(), verts.size(), sf::PrimitiveType::Triangles, states);
+                std::vector<IntPoint> intRing;
+                for (const auto &p : ring)
+                {
+                    // Chống tràn số khi convert sang int
+                    if (std::abs(p.x) > 1e7 || std::abs(p.y) > 1e7)
+                        continue;
+                    intRing.push_back({static_cast<int64_t>(p.x * SCALE), static_cast<int64_t>(p.y * SCALE)});
+                }
+                if (intRing.size() >= 3)
+                {
+                    intPolygon.push_back(intRing);
+                    // Lưu lại điểm thực để lát nữa lấy ra vẽ
+                    flatPoints.insert(flatPoints.end(), ring.begin(), ring.end());
+                }
+            }
+
+            if (intPolygon.empty())
+                continue;
+
+            // Gọi thư viện earcut để lấy danh sách chỉ số tam giác
+            std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(intPolygon);
+            // --- KẾT THÚC LOGIC EARCUT ---
+
+            // D. Tạo VertexArray để vẽ
+            sf::VertexArray va(sf::PrimitiveType::Triangles);
+
+            for (uint32_t idx : indices)
+            {
+                if (idx < flatPoints.size())
+                {
+                    sf::Vector2f pt = flatPoints[idx];
+                    sf::Color finalColor;
+                    sf::Vector2f uv(0.f, 0.f);
+
+                    if (isGradient)
+                    {
+                        // KỸ THUẬT MỚI: TEXTURE MAPPING
+                        // Tính tọa độ UV dựa trên vị trí điểm so với Bounding Box
+                        // Công thức: (Vị trí hiện tại - Gốc) / Kích thước * Kích thước Texture
+                        float u = ((pt.x - bbox.position.x) / bbox.size.x) * gradTex.getSize().x;
+                        float v = ((pt.y - bbox.position.y) / bbox.size.y) * gradTex.getSize().y;
+
+                        uv = sf::Vector2f(u, v);
+                        finalColor = sf::Color::White; // Màu trắng để hiển thị đúng màu gốc của Texture
+                    }
+                    else
+                    {
+                        // KỸ THUẬT CŨ: SOLID COLOR
+                        finalColor = solidColor;
+                    }
+
+                    // Áp dụng độ trong suốt (Opacity)
+                    finalColor.a = static_cast<std::uint8_t>(fillOpacity * 255);
+
+                    // Thêm đỉnh vào mảng vẽ (bao gồm cả tọa độ UV nếu có)
+                    // [SFML 3.0 Init]
+                    va.append(sf::Vertex{pt, finalColor, uv});
+                }
+            }
+
+            if (va.getVertexCount() > 0)
+            {
+                window.draw(va, states);
             }
         }
     }
